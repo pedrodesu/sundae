@@ -1,0 +1,18 @@
+// const float decl
+float pi := 3 // approx rounding when complex number impl is finished, sorry :(
+
+// hex decl
+// int a := 0x000f ^
+
+// func decl
+pub func add(int a, int b) {
+  int c := 2
+  c = b
+  a + c
+}
+
+// const string decl
+string name := 'Pedro'
+
+// func call
+greet('Pedro')
