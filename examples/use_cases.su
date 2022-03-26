@@ -1,8 +1,12 @@
 // const float decl
-float pi := 3 // approx rounding when complex number impl is finished, sorry :(
+float pi := 3.141_5E+20
 
 // hex decl
-// int a := 0x000f ^
+int a := 0x000f
+// oct decl
+int b := 0o126_434
+// bin decl
+int c := 0b000_101
 
 // func decl
 pub func add(int a, int b) {

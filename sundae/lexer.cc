@@ -1,23 +1,18 @@
 /*
-Copyright (c) 2022 Pedro Ferreira
+Copyright (C) 2022 Pedro Ferreira
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-of the Software, and to permit persons to whom the Software is furnished to do
-so, subject to the following conditions:
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "sundae/lexer.h"
@@ -42,27 +37,47 @@ std::optional<TokenType> get_type(std::string expression) {
                !expression.ends_with('\\' + delim) && expression.length() > 1;
     };
 
-    auto all_is_underscore_or =
-        [expression](std::function<bool(char)> predicate) -> bool {
-        return all_of(
-            expression.begin(), expression.end(),
-            [&predicate](auto ch) { return ch == '_' || predicate(ch); });
+    // Whether the expression is a valid "special" number (supports numbers in
+    // binary, octal and hexadecimal form)
+    auto has_special_number_bound =
+        [expression](std::string initial_pattern,
+                     std::function<bool(char)> predicate) -> bool {
+        return expression.starts_with(initial_pattern) &&
+               utils::every_char_is_underscore_or(expression.substr(2),
+                                                  predicate);
     };
 
-    if (utils::includes(kKeywords, expression))
+    if (has_literal_bound(kStringBound) || has_literal_bound(kRuneBound) ||
+        utils::is_in(expression, kBoolValues.first, kBoolValues.second) ||
+        (utils::every_char_is_underscore_or(
+             expression, [](auto ch) { return isdigit(ch); }) ||
+         (utils::every_char_is_underscore_or(expression,
+                                             [](auto ch) {
+                                                 return isdigit(ch) ||
+                                                        utils::is_in(ch, '.',
+                                                                     'E', '+');
+                                             }) &&
+          std::count(expression.begin(), expression.end(), '.') == 1) ||
+         (has_special_number_bound(
+              "0b", [](auto ch) { return utils::is_in(ch, '0', '1'); }) ||
+          has_special_number_bound("0o",
+                                   [](auto ch) {
+                                       return utils::is_in(ch, '0', '1', '2',
+                                                           '3', '4', '5', '6',
+                                                           '7');
+                                   }) ||
+          has_special_number_bound("0x",
+                                   [](auto ch) { return isxdigit(ch); }))))
+        return kLiteral;
+    else if (utils::includes(kKeywords, expression))
         return kKeyword;
-    else if (utils::includes(kBreakers, expression))
-        return kBreaker;
+    else if (utils::every_char_is_underscore_or(
+                 expression, [](auto ch) { return isalnum(ch); }))
+        return kIdentifier;
     else if (utils::includes(kOperators, expression))
         return kOperator;
-    // TODO: finish complex number literal form impl (0x..., 0b..., 3.5)
-    else if (has_literal_bound(kStringBound) || has_literal_bound(kRuneBound) ||
-             expression == kBoolValues.first ||
-             expression == kBoolValues.second ||
-             all_is_underscore_or([](auto ch) { return isdigit(ch); }))
-        return kLiteral;
-    else if (all_is_underscore_or([](auto ch) { return isalnum(ch); }))
-        return kIdentifier;
+    else if (utils::includes(kBreakers, expression))
+        return kBreaker;
     else if (expression == "\n")
         return kNewline;
     else if (utils::any_of_comment([expression](auto pair) {
@@ -93,9 +108,9 @@ std::vector<Token> Lexer::tokenise() {
         if (auto curr_type_opt = get_type(curr)) {
             TokenType &curr_type = *curr_type_opt;
 
-            auto dispatch = [this, update_pos, &curr_type, &curr]() {
-                Token token(curr, curr_type,
-                            std::make_pair(last_pos, curr_pos + 1));
+            auto dispatch = [curr_type, curr, update_pos, this,
+                             pos = std::make_pair(last_pos, curr_pos + 1)]() {
+                Token token(curr, curr_type, pos);
                 update_pos();
                 collected.push_back(token);
             };
@@ -108,6 +123,7 @@ std::vector<Token> Lexer::tokenise() {
 
                 if (auto next_type_opt = get_type(*next)) {
                     TokenType &next_type = *next_type_opt;
+
                     if (curr_type == next_type && curr_type != kPrioritised ||
                         (curr_type == kIdentifier &&
                          utils::includes(kIdentifierUpgrades, next_type)))
