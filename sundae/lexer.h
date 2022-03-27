@@ -132,8 +132,8 @@ inline std::string TypeDisplay(TokenType type) noexcept {
 struct Token {
   std::string value;
   TokenType type;
-  std::pair<uint, uint> position;
-  Token(std::string, TokenType, std::pair<uint, uint>) noexcept;
+  std::pair<int, int> position;
+  Token(std::string, TokenType, std::pair<int, int>) noexcept;
 };
 
 class Lexer {
@@ -151,13 +151,13 @@ class Lexer {
 
  private:
   std::string buffer_;
-  uint last_position_;
-  uint current_position_;
+  int last_position_;
+  int current_position_;
   std::vector<Token> collected_;
 
   // Returns a buffer slice from last_pos to provided next_position. If out of
   // bounds, returns an empty option
-  inline std::optional<std::string> Seek(uint next_position) const noexcept {
+  inline std::optional<std::string> Seek(int next_position) const noexcept {
     return next_position < buffer_.length()
                ? std::optional(buffer_.substr(
                      last_position_, next_position - last_position_ + 1))

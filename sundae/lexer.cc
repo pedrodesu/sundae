@@ -46,24 +46,40 @@ std::optional<TokenType> GetType(std::string expression) noexcept {
            utils::EveryCharIsUnderscoreOr(expression.substr(2), predicate);
   };
 
-  if (has_literal_bound(kStringBound) || has_literal_bound(kRuneBound) ||
+  if (
+      // Strings
+      has_literal_bound(kStringBound) ||
+      // Runes
+      has_literal_bound(kRuneBound) ||
+      // Bools
       utils::IsIn(expression, kBoolValues.first, kBoolValues.second) ||
-      (utils::EveryCharIsUnderscoreOr(expression,
-                                      [](auto ch) { return isdigit(ch); }) ||
-       (utils::EveryCharIsUnderscoreOr(expression,
+      // Numbers
+      (
+          // Integers
+          utils::EveryCharIsUnderscoreOr(expression,
+                                         [](auto ch) { return isdigit(ch); }) ||
+          // Floats
+          (utils::EveryCharIsUnderscoreOr(expression,
+                                          [](auto ch) {
+                                            return isdigit(ch) ||
+                                                   utils::IsIn(ch, '.', 'E',
+                                                               '+');
+                                          }) &&
+           std::count(expression.begin(), expression.end(), '.') == 1) ||
+          (
+              // Binary
+              has_special_number_bound(
+                  "0b", [](auto ch) { return utils::IsIn(ch, '0', '1'); }) ||
+              // Octal
+              has_special_number_bound("0o",
                                        [](auto ch) {
-                                         return isdigit(ch) ||
-                                                utils::IsIn(ch, '.', 'E', '+');
-                                       }) &&
-        std::count(expression.begin(), expression.end(), '.') == 1) ||
-       (has_special_number_bound(
-            "0b", [](auto ch) { return utils::IsIn(ch, '0', '1'); }) ||
-        has_special_number_bound("0o",
-                                 [](auto ch) {
-                                   return utils::IsIn(ch, '0', '1', '2', '3',
-                                                      '4', '5', '6', '7');
-                                 }) ||
-        has_special_number_bound("0x", [](auto ch) { return isxdigit(ch); }))))
+                                         return utils::IsIn(ch, '0', '1', '2',
+                                                            '3', '4', '5', '6',
+                                                            '7');
+                                       }) ||
+              // Hexadecimal
+              has_special_number_bound("0x",
+                                       [](auto ch) { return isxdigit(ch); }))))
     return kLiteral;
   else if (utils::Includes(kKeywords, expression))
     return kKeyword;
@@ -86,7 +102,7 @@ std::optional<TokenType> GetType(std::string expression) noexcept {
 }
 
 Token::Token(std::string value, TokenType type,
-             std::pair<uint, uint> position) noexcept
+             std::pair<int, int> position) noexcept
     : value(value), type(type), position(position) {}
 
 Lexer::Lexer(std::string buffer) noexcept

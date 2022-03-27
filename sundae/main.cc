@@ -35,9 +35,10 @@ int main() {
   sundae::lexer::Lexer lexer(buffer);
   std::vector<sundae::lexer::Token> tokens = lexer.Tokenise();
 
+  // TODO: impl fragment big functions (GetToken() and Tokenise())
   // TODO: impl unit testing
-  // TODO: add comments between sections of GetType (Google C++ convention way)
-  // TODO: implement error handling, start parsing (comment below code after)
+  // TODO: implement error handling
+  // TODO: start parsing
   for (auto i = tokens.begin(); i != tokens.end(); ++i) {
     auto [value, type, position] = *i;
     auto [init, end] = position;
