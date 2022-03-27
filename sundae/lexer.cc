@@ -31,7 +31,7 @@ inline namespace compiler {
 
 namespace lexer {
 
-std::optional<TokenType> GetType(std::string expression) noexcept {
+std::optional<TokenType> Type(std::string expression) noexcept {
   auto has_literal_bound = [expression](char delim) -> bool {
     return expression.starts_with(delim) && expression.ends_with(delim) &&
            !expression.ends_with('\\' + delim) && expression.length() > 1;
@@ -53,7 +53,6 @@ std::optional<TokenType> GetType(std::string expression) noexcept {
       has_literal_bound(kRuneBound) ||
       // Bools
       utils::IsIn(expression, kBoolValues.first, kBoolValues.second) ||
-      // Numbers
       (
           // Integers
           utils::EveryCharIsUnderscoreOr(expression,
@@ -112,6 +111,10 @@ std::vector<Token> Lexer::Tokenise() {
   auto update_pos = [this]() { last_position_ = current_position_ + 1; };
   for (; current_position_ < buffer_.length(); ++current_position_) {
     char c = buffer_[current_position_];
+
+    // Skip whitespace if the whitespace is irrelevant (isn't a newline) and we
+    // haven't started collecting a new token (the whitespace isn't associated
+    // with any token, such as a string literal)
     if (c != '\n' && isspace(c) && last_position_ == current_position_) {
       update_pos();
       continue;
@@ -119,7 +122,8 @@ std::vector<Token> Lexer::Tokenise() {
 
     std::string current = CurrentState();
 
-    if (auto curr_type_opt = GetType(current)) {
+    // Current must have a type for a dispatch to happen
+    if (auto curr_type_opt = Type(current)) {
       TokenType &current_type = *curr_type_opt;
 
       auto dispatch =
@@ -130,18 +134,27 @@ std::vector<Token> Lexer::Tokenise() {
             collected_.push_back(token);
           };
 
-      if (auto next = NextState()) {
+      // Should dispatch immediately if there's no next (EOF)
+      if (auto next_opt = NextState()) {
+        std::string &next = *next_opt;
+        // We want to keep going if next is a comment's left bound (comments
+        // have 2 chars bounds, so we have to check for them ahead, in next, a
+        // 1-char-difference current check won't work)
         if (utils::AnyOfComment(
-                [next](auto pair) { return pair.first == *next; })) {
+                [next](auto pair) { return pair.first == next; })) {
           continue;
         }
 
-        if (auto next_type_opt = GetType(*next)) {
+        // Should dispatch immediately if next has no type (current is the last
+        // form of a valid token continuously at this point)
+        if (auto next_type_opt = Type(next)) {
           TokenType &next_type = *next_type_opt;
 
-          if (current_type == next_type && current_type != kPrioritised ||
-              (current_type == kIdentifier &&
-               utils::Includes(kIdentifierUpgrades, next_type)))
+          // We shouldn't dispatch when we will get the same type on next or if
+          // both are identifier branches
+          if (current_type == next_type ||
+              (utils::Includes(kIdentifierBranches, current_type) &&
+               utils::Includes(kIdentifierBranches, next_type)))
             continue;
         }
       }

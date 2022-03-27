@@ -68,16 +68,10 @@ enum TokenType {
   kComment,
 };
 
-// The direct allowed upgrades to identifiers
-// This has to do with the lexer's internal logic. Technically all of the
-// following can be described as generic identifiers, so we define this as so
-// the lexer does not panic on a desired type change
-const std::array<TokenType, 1> kIdentifierUpgrades = {kKeyword};
-
-// Type which overrides getting the other types and whose predicate will be
-// checked even for the peeked value, so as to check if its type should be
-// switched accordingly
-const TokenType kPrioritised = kComment;
+// The identifier branches (with the identifier itself)
+// Technically all of the following can be replaced with the identifier type, so
+// this definition allows changes to and from a desired identifier branch change
+const std::array<TokenType, 2> kIdentifierBranches = {kIdentifier, kKeyword};
 
 namespace utils {
 
@@ -108,7 +102,7 @@ inline bool IsIn(T first, U... t) noexcept {
 
 }  // namespace utils
 
-std::optional<TokenType> GetType(std::string expr) noexcept;
+std::optional<TokenType> Type(std::string expr) noexcept;
 
 inline std::string TypeDisplay(TokenType type) noexcept {
   switch (type) {

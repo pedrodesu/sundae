@@ -35,7 +35,6 @@ int main() {
   sundae::lexer::Lexer lexer(buffer);
   std::vector<sundae::lexer::Token> tokens = lexer.Tokenise();
 
-  // TODO: impl fragment big functions (GetToken() and Tokenise())
   // TODO: impl unit testing
   // TODO: implement error handling
   // TODO: start parsing
