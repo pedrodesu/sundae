@@ -1,22 +1,22 @@
-/*
-Copyright (C) 2022 Pedro Ferreira
+// Copyright (C) 2022 Pedro Ferreira
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+#ifndef SUNDAE_LEXER_H_
+#define SUNDAE_LEXER_H_
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#pragma once
-
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <optional>
@@ -75,11 +75,31 @@ const std::array<TokenType, 2> kIdentifierBranches = {kIdentifier, kKeyword};
 
 namespace utils {
 
+inline bool StartsWith(std::string haystack, char needle) {
+  std::string str_needle(1, needle);
+  return haystack.compare(0, str_needle.length(), str_needle) == 0;
+}
+
+inline bool EndsWith(std::string haystack, char needle) {
+  std::string str_needle(1, needle);
+  return haystack.compare(haystack.length() - str_needle.length(),
+                          str_needle.length(), str_needle) == 0;
+}
+
+inline bool StartsWith(std::string haystack, std::string needle) {
+  return haystack.compare(0, needle.length(), needle) == 0;
+}
+
+inline bool EndsWith(std::string haystack, std::string needle) {
+  return haystack.compare(haystack.length() - needle.length(), needle.length(),
+                          needle) == 0;
+}
+
 // Returns whether the given predicate passes for any comment pair
-inline bool AnyOfComment(
+inline bool AnyOfCommentPair(
     std::function<bool(std::pair<std::string, std::string>)> pred) {
   return std::any_of(kCommentPairs.begin(), kCommentPairs.end(),
-                     [pred](auto pair) { return pred(pair); });
+                     [=](auto pair) { return pred(pair); });
 }
 
 // Returns whether the haystack array includes the element needle
@@ -90,9 +110,8 @@ inline bool Includes(std::array<T, U> haystack, T needle) {
 
 inline bool EveryCharIsUnderscoreOr(std::string value,
                                     std::function<bool(char)> predicate) {
-  return std::all_of(value.begin(), value.end(), [&predicate](auto ch) {
-    return ch == '_' || predicate(ch);
-  });
+  return std::all_of(value.begin(), value.end(),
+                     [=](char ch) { return ch == '_' || predicate(ch); });
 }
 
 template <typename T, typename... U>
@@ -127,7 +146,6 @@ struct Token {
   std::string value;
   TokenType type;
   std::pair<int, int> position;
-  Token(std::string, TokenType, std::pair<int, int>) noexcept;
 };
 
 class Lexer {
@@ -164,3 +182,5 @@ class Lexer {
 }  // namespace compiler
 
 }  // namespace sundae
+
+#endif  // SUNDAE_LEXER_H_
