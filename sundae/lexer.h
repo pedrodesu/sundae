@@ -59,13 +59,13 @@ const char kStringBound = '\'';
 const char kRuneBound = '`';
 
 enum TokenType {
-    kKeyword,
-    kBreaker,
-    kOperator,
-    kLiteral,
-    kIdentifier,
-    kNewline,
-    kComment,
+  kKeyword,
+  kBreaker,
+  kOperator,
+  kLiteral,
+  kIdentifier,
+  kNewline,
+  kComment,
 };
 
 // The direct allowed upgrades to identifiers
@@ -82,84 +82,87 @@ const TokenType kPrioritised = kComment;
 namespace utils {
 
 // Returns whether the given predicate passes for any comment pair
-inline bool any_of_comment(
+inline bool AnyOfComment(
     std::function<bool(std::pair<std::string, std::string>)> pred) {
-    return std::any_of(kCommentPairs.begin(), kCommentPairs.end(),
-                       [pred](auto pair) { return pred(pair); });
+  return std::any_of(kCommentPairs.begin(), kCommentPairs.end(),
+                     [pred](auto pair) { return pred(pair); });
 }
 
 // Returns whether the haystack array includes the element needle
 template <typename T, std::size_t U>
-inline bool includes(std::array<T, U> haystack, T needle) {
-    return std::find(haystack.begin(), haystack.end(), needle) !=
-           haystack.end();
+inline bool Includes(std::array<T, U> haystack, T needle) {
+  return std::find(haystack.begin(), haystack.end(), needle) != haystack.end();
 }
 
-inline bool every_char_is_underscore_or(std::string value,
-                                        std::function<bool(char)> predicate) {
-    return all_of(value.begin(), value.end(),
-                  [&predicate](auto ch) { return ch == '_' || predicate(ch); });
+inline bool EveryCharIsUnderscoreOr(std::string value,
+                                    std::function<bool(char)> predicate) {
+  return std::all_of(value.begin(), value.end(), [&predicate](auto ch) {
+    return ch == '_' || predicate(ch);
+  });
 }
 
 template <typename T, typename... U>
-inline bool is_in(T first, U... t) {
-    return ((first == t) || ...);
+inline bool IsIn(T first, U... t) noexcept {
+  return ((first == t) || ...);
 }
 
 }  // namespace utils
 
-std::optional<TokenType> get_type(std::string expr);
+std::optional<TokenType> GetType(std::string expr) noexcept;
 
-inline std::string type_display(TokenType type) {
-    switch (type) {
-        case kKeyword:
-            return "KEYWORD";
-        case kBreaker:
-            return "BREAKER";
-        case kOperator:
-            return "OPERATOR";
-        case kLiteral:
-            return "LITERAL";
-        case kIdentifier:
-            return "IDENTIFIER";
-        case kNewline:
-            return "NEWLINE";
-        case kComment:
-            return "COMMENT";
-    }
+inline std::string TypeDisplay(TokenType type) noexcept {
+  switch (type) {
+    case kKeyword:
+      return "KEYWORD";
+    case kBreaker:
+      return "BREAKER";
+    case kOperator:
+      return "OPERATOR";
+    case kLiteral:
+      return "LITERAL";
+    case kIdentifier:
+      return "IDENTIFIER";
+    case kNewline:
+      return "NEWLINE";
+    case kComment:
+      return "COMMENT";
+  }
 }
 
 struct Token {
-    std::string value;
-    TokenType type;
-    std::pair<uint, uint> pos;
-    Token(std::string, TokenType, std::pair<uint, uint>);
+  std::string value;
+  TokenType type;
+  std::pair<uint, uint> position;
+  Token(std::string, TokenType, std::pair<uint, uint>) noexcept;
 };
 
 class Lexer {
-   public:
-    Lexer(std::string);
-    std::vector<Token> tokenise();
+ public:
+  Lexer(std::string) noexcept;
+  std::vector<Token> Tokenise();
 
-    inline std::string curr_state() const { return seek(curr_pos).value(); }
+  inline std::string CurrentState() const noexcept {
+    return *Seek(current_position_);
+  }
 
-    inline std::optional<std::string> next_state() const {
-        return seek(curr_pos + 1);
-    }
+  inline std::optional<std::string> NextState() const noexcept {
+    return Seek(current_position_ + 1);
+  }
 
-   private:
-    std::string buf;
-    uint last_pos;
-    uint curr_pos;
-    std::vector<Token> collected;
+ private:
+  std::string buffer_;
+  uint last_position_;
+  uint current_position_;
+  std::vector<Token> collected_;
 
-    // Returns a buffer slice from last_pos to provided next_pos. If out of
-    // bounds, returns an empty option
-    inline std::optional<std::string> seek(uint next_pos) const {
-        return next_pos < buf.length() ? std::optional(buf.substr(
-                                             last_pos, next_pos - last_pos + 1))
-                                       : std::nullopt;
-    }
+  // Returns a buffer slice from last_pos to provided next_position. If out of
+  // bounds, returns an empty option
+  inline std::optional<std::string> Seek(uint next_position) const noexcept {
+    return next_position < buffer_.length()
+               ? std::optional(buffer_.substr(
+                     last_position_, next_position - last_position_ + 1))
+               : std::nullopt;
+  }
 };
 
 }  // namespace lexer

@@ -25,26 +25,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ENTRY_POINT "../examples/use_cases.su"
 
 int main() {
-    std::ifstream f(ENTRY_POINT);
-    if (!f) {
-        std::cerr << "error getting file\n";
-        exit(EXIT_FAILURE);
-    }
-    std::string buf((std::istreambuf_iterator<char>(f)),
-                    (std::istreambuf_iterator<char>()));
-    sundae::lexer::Lexer lexer(buf);
-    std::vector<sundae::lexer::Token> tokens = lexer.tokenise();
+  std::ifstream f(ENTRY_POINT);
+  if (!f) {
+    std::cerr << "error getting file\n";
+    exit(EXIT_FAILURE);
+  }
+  std::string buffer((std::istreambuf_iterator<char>(f)),
+                     (std::istreambuf_iterator<char>()));
+  sundae::lexer::Lexer lexer(buffer);
+  std::vector<sundae::lexer::Token> tokens = lexer.Tokenise();
 
-    // TODO: impl unit testing
-    // TODO: clean up and subdivide if conditions on get_type and tokenise
-    // TODO: implement error handling, start parsing (comment below code after)
-    for (auto i = tokens.begin(); i != tokens.end(); ++i) {
-        auto [value, type, pos] = *i;
-        auto [init, end] = pos;
-        std::cout << "TYPE: " << sundae::lexer::type_display(type)
-                  << "\r\t\t\tPOS: [" << init << "..." << end << "]"
-                  << "\r\t\t\t\t\t\tVALUE: \""
-                  << std::regex_replace(value, std::regex("\n"), "\\n")
-                  << "\"\n";
-    }
+  // TODO: impl unit testing
+  // TODO: add comments between sections of GetType (Google C++ convention way)
+  // TODO: implement error handling, start parsing (comment below code after)
+  for (auto i = tokens.begin(); i != tokens.end(); ++i) {
+    auto [value, type, position] = *i;
+    auto [init, end] = position;
+    std::cout << "TYPE: " << sundae::lexer::TypeDisplay(type)
+              << "\r\t\t\tPOS: [" << init << "..." << end << "]"
+              << "\r\t\t\t\t\t\tVALUE: \""
+              << std::regex_replace(value, std::regex("\n"), "\\n") << "\"\n";
+  }
 }
