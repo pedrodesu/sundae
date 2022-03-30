@@ -16,6 +16,7 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 
 include_directories(.)
+
 list(APPEND SOURCES main lexer)
 
 list(SUBLIST SOURCES 1 -1 TEST_SOURCES)

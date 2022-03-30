@@ -75,41 +75,41 @@ const std::array<TokenType, 2> kIdentifierBranches = {kIdentifier, kKeyword};
 
 namespace utils {
 
-inline bool StartsWith(std::string haystack, char needle) {
+inline bool StartsWith(std::string haystack, char needle) noexcept {
   std::string str_needle(1, needle);
   return haystack.compare(0, str_needle.length(), str_needle) == 0;
 }
 
-inline bool EndsWith(std::string haystack, char needle) {
+inline bool EndsWith(std::string haystack, char needle) noexcept {
   std::string str_needle(1, needle);
   return haystack.compare(haystack.length() - str_needle.length(),
                           str_needle.length(), str_needle) == 0;
 }
 
-inline bool StartsWith(std::string haystack, std::string needle) {
+inline bool StartsWith(std::string haystack, std::string needle) noexcept {
   return haystack.compare(0, needle.length(), needle) == 0;
 }
 
-inline bool EndsWith(std::string haystack, std::string needle) {
+inline bool EndsWith(std::string haystack, std::string needle) noexcept {
   return haystack.compare(haystack.length() - needle.length(), needle.length(),
                           needle) == 0;
 }
 
 // Returns whether the given predicate passes for any comment pair
 inline bool AnyOfCommentPair(
-    std::function<bool(std::pair<std::string, std::string>)> pred) {
+    std::function<bool(std::pair<std::string, std::string>)> pred) noexcept {
   return std::any_of(kCommentPairs.begin(), kCommentPairs.end(),
                      [=](auto pair) { return pred(pair); });
 }
 
 // Returns whether the haystack array includes the element needle
 template <typename T, std::size_t U>
-inline bool Includes(std::array<T, U> haystack, T needle) {
+inline bool Includes(std::array<T, U> haystack, T needle) noexcept {
   return std::find(haystack.begin(), haystack.end(), needle) != haystack.end();
 }
 
-inline bool EveryCharIsUnderscoreOr(std::string value,
-                                    std::function<bool(char)> predicate) {
+inline bool EveryCharIsUnderscoreOr(
+    std::string value, std::function<bool(char)> predicate) noexcept {
   return std::all_of(value.begin(), value.end(),
                      [=](char ch) { return ch == '_' || predicate(ch); });
 }
@@ -121,7 +121,7 @@ inline bool IsIn(T first, U... t) noexcept {
 
 }  // namespace utils
 
-std::optional<TokenType> Type(std::string expr) noexcept;
+std::optional<TokenType> GetType(std::string expression) noexcept;
 
 inline std::string TypeDisplay(TokenType type) noexcept {
   switch (type) {

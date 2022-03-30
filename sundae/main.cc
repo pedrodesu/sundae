@@ -33,6 +33,7 @@ int main() {
   sundae::lexer::Lexer lexer(buffer);
   std::vector<sundae::lexer::Token> tokens = lexer.Tokenise();
 
+  // TODO: finish tests (getting undefined reference to GetType() ?)
   // TODO: implement error handling
   // TODO: start parsing
   for (auto i = tokens.begin(); i != tokens.end(); ++i) {

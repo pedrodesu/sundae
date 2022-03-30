@@ -15,9 +15,8 @@
 
 #include "sundae/lexer.h"
 
-#include <ctype.h>
-
 #include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -29,7 +28,7 @@ inline namespace compiler {
 
 namespace lexer {
 
-std::optional<TokenType> Type(std::string expression) noexcept {
+std::optional<TokenType> GetType(std::string expression) noexcept {
   auto has_literal_bound = [=](char delim) -> bool {
     return expression.length() > 1 && utils::StartsWith(expression, delim) &&
            utils::EndsWith(expression, delim) &&
@@ -118,7 +117,7 @@ std::vector<Token> Lexer::Tokenise() {
     std::string current = CurrentState();
 
     // Current must have a type for a dispatch to happen
-    if (auto curr_type_opt = Type(current)) {
+    if (auto curr_type_opt = GetType(current)) {
       TokenType &current_type = *curr_type_opt;
 
       // Should dispatch immediately if there's no next (EOF)
@@ -134,7 +133,7 @@ std::vector<Token> Lexer::Tokenise() {
 
         // Should dispatch immediately if next has no type (current is the last
         // form of a valid token continuously at this point)
-        if (auto next_type_opt = Type(next)) {
+        if (auto next_type_opt = GetType(next)) {
           TokenType &next_type = *next_type_opt;
 
           // We shouldn't dispatch when we will get the same type on next or if

@@ -15,6 +15,11 @@
 
 #include "sundae/lexer.h"
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <string>
+
 #include "gtest/gtest.h"
 
 namespace sundae {
@@ -85,7 +90,9 @@ TEST(TypeHelpers, IsIn) {
 
 }  // namespace utils
 
-TEST(Type, Strings) {}
+TEST(TypeValidation, Strings) {
+  EXPECT_EQ(GetType("'hello, world!'"), std::optional{TokenType::kLiteral});
+}
 
 }  // namespace lexer
 
