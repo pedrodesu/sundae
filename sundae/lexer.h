@@ -26,13 +26,11 @@
 
 namespace sundae {
 
-inline namespace compiler {
-
 namespace lexer {
 
 // The special keywords the language contains
 const std::array<std::string, 6> kKeywords = {"pub",  "const", "struct",
-                                              "enum", "func",  "use"};
+                                              "enum",  "use"};
 
 // The separators the language contains
 // These don't have the semantic value an operator would have, and exist only
@@ -58,7 +56,7 @@ const char kStringBound = '\'';
 // extension of the latter, a Unicode grapheme
 const char kRuneBound = '`';
 
-enum TokenType {
+enum class TokenType {
   kKeyword,
   kBreaker,
   kOperator,
@@ -71,7 +69,7 @@ enum TokenType {
 // The identifier branches (with the identifier itself)
 // Technically all of the following can be replaced with the identifier type, so
 // this definition allows changes to and from a desired identifier branch change
-const std::array<TokenType, 2> kIdentifierBranches = {kIdentifier, kKeyword};
+const std::array<TokenType, 2> kIdentifierBranches = { TokenType::kIdentifier, TokenType::kKeyword };
 
 namespace utils {
 
@@ -125,19 +123,19 @@ std::optional<TokenType> GetType(std::string expression) noexcept;
 
 inline std::string TypeDisplay(TokenType type) noexcept {
   switch (type) {
-    case kKeyword:
+    case TokenType::kKeyword:
       return "KEYWORD";
-    case kBreaker:
+    case TokenType::kBreaker:
       return "BREAKER";
-    case kOperator:
+    case TokenType::kOperator:
       return "OPERATOR";
-    case kLiteral:
+    case TokenType::kLiteral:
       return "LITERAL";
-    case kIdentifier:
+    case TokenType::kIdentifier:
       return "IDENTIFIER";
-    case kNewline:
+    case TokenType::kNewline:
       return "NEWLINE";
-    case kComment:
+    case TokenType::kComment:
       return "COMMENT";
   }
 }
@@ -151,7 +149,7 @@ struct Token {
 class Lexer {
  public:
   Lexer(std::string) noexcept;
-  std::vector<Token> Tokenise();
+  std::vector<Token> Tokenise() noexcept;
 
   inline std::string CurrentState() const noexcept {
     return *Seek(current_position_);
@@ -178,8 +176,6 @@ class Lexer {
 };
 
 }  // namespace lexer
-
-}  // namespace compiler
 
 }  // namespace sundae
 

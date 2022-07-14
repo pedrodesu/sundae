@@ -17,11 +17,11 @@ enable_testing()
 
 include_directories(.)
 
-list(APPEND SOURCES main lexer)
+list(APPEND SOURCES main lexer parser)
 
 list(SUBLIST SOURCES 1 -1 TEST_SOURCES)
 foreach(test ${TEST_SOURCES})
-    add_executable(${test} sundae/${test}_test.cc)
+    add_executable(${test} sundae/${test}.cc sundae/${test}_test.cc)
     target_link_libraries(${test} gtest_main)
     add_test(${test} ${test})
 endforeach()
@@ -29,7 +29,3 @@ endforeach()
 list(TRANSFORM SOURCES PREPEND sundae/)
 list(TRANSFORM SOURCES APPEND .cc)
 add_executable(sundae ${SOURCES})
-
-set(CPACK_PROJECT_NAME ${PROJECT_NAME})
-set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
-include(CPack)

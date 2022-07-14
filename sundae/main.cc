@@ -19,13 +19,14 @@
 #include <string>
 
 #include "sundae/lexer.h"
+#include "sundae/parser.h"
 
 #define ENTRY_POINT "../examples/use_cases.su"
 
 int main() {
   std::ifstream f(ENTRY_POINT);
   if (!f) {
-    std::cerr << "error getting file\n";
+    std::cerr << "no such file: '" << ENTRY_POINT << "'\n";
     exit(EXIT_FAILURE);
   }
   std::string buffer((std::istreambuf_iterator<char>(f)),
@@ -33,8 +34,6 @@ int main() {
   sundae::lexer::Lexer lexer(buffer);
   std::vector<sundae::lexer::Token> tokens = lexer.Tokenise();
 
-  // TODO: finish tests (getting undefined reference to GetType() ?)
-  // TODO: implement error handling
   // TODO: start parsing
   for (auto i = tokens.begin(); i != tokens.end(); ++i) {
     auto [value, type, position] = *i;
@@ -44,4 +43,7 @@ int main() {
               << "\r\t\t\t\t\t\tVALUE: \""
               << std::regex_replace(value, std::regex("\n"), "\\n") << "\"\n";
   }
+
+  sundae::parser::Parser parser(tokens);
+  parser.Parse();
 }

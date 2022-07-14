@@ -1,5 +1,5 @@
 // const float decl
-float pi := 3.141_5E+20
+const float pi := 3.141_5E+20
 
 // hex decl
 int a := 0x000f
@@ -9,7 +9,7 @@ int b := 0o126_434
 int c := 0b000_101
 
 // func decl
-pub func add(int a, int b) {
+pub int add := (int a, int b) {
   int c := 2
   c = b
   a + c

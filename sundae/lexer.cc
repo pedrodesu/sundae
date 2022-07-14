@@ -15,16 +15,10 @@
 
 #include "sundae/lexer.h"
 
-#include <algorithm>
 #include <cctype>
 #include <iostream>
-#include <optional>
-#include <string>
-#include <vector>
 
 namespace sundae {
-
-inline namespace compiler {
 
 namespace lexer {
 
@@ -77,23 +71,23 @@ std::optional<TokenType> GetType(std::string expression) noexcept {
               // Hexadecimal
               has_special_number_bound("0x",
                                        [](char ch) { return isxdigit(ch); }))))
-    return kLiteral;
+    return TokenType::kLiteral;
   else if (utils::Includes(kKeywords, expression))
-    return kKeyword;
+    return TokenType::kKeyword;
   else if (utils::EveryCharIsUnderscoreOr(expression,
                                           [](char ch) { return isalnum(ch); }))
-    return kIdentifier;
+    return TokenType::kIdentifier;
   else if (utils::Includes(kOperators, expression))
-    return kOperator;
+    return TokenType::kOperator;
   else if (utils::Includes(kBreakers, expression))
-    return kBreaker;
+    return TokenType::kBreaker;
   else if (expression == "\n")
-    return kNewline;
+    return TokenType::kNewline;
   else if (utils::AnyOfCommentPair([=](auto pair) {
              return utils::StartsWith(expression, pair.first) &&
                     utils::EndsWith(expression, pair.second);
            }))
-    return kComment;
+    return TokenType::kComment;
   else
     return std::nullopt;
 }
@@ -101,7 +95,7 @@ std::optional<TokenType> GetType(std::string expression) noexcept {
 Lexer::Lexer(std::string buffer) noexcept
     : buffer_(std::move(buffer)), last_position_(0), current_position_(0) {}
 
-std::vector<Token> Lexer::Tokenise() {
+std::vector<Token> Lexer::Tokenise() noexcept {
   auto update_pos = [&] { last_position_ = current_position_ + 1; };
   for (; current_position_ < buffer_.length(); ++current_position_) {
     char c = buffer_[current_position_];
@@ -118,7 +112,7 @@ std::vector<Token> Lexer::Tokenise() {
 
     // Current must have a type for a dispatch to happen
     if (auto curr_type_opt = GetType(current)) {
-      TokenType &current_type = *curr_type_opt;
+      TokenType current_type = *std::move(curr_type_opt);
 
       // Should dispatch immediately if there's no next (EOF)
       if (auto next_opt = NextState()) {
@@ -134,7 +128,7 @@ std::vector<Token> Lexer::Tokenise() {
         // Should dispatch immediately if next has no type (current is the last
         // form of a valid token continuously at this point)
         if (auto next_type_opt = GetType(next)) {
-          TokenType &next_type = *next_type_opt;
+          TokenType next_type = *std::move(next_type_opt);
 
           // We shouldn't dispatch when we will get the same type on next or if
           // both are identifier branches
@@ -152,6 +146,11 @@ std::vector<Token> Lexer::Tokenise() {
           .position = std::make_pair(last_position_, current_position_)};
       update_pos();
       collected_.push_back(token);
+    } else {
+      if (!NextState().has_value()) {
+        std::cout << "undefined token: '" << current << "'\n";
+        exit(EXIT_FAILURE);
+      }
     }
   }
 
@@ -159,7 +158,5 @@ std::vector<Token> Lexer::Tokenise() {
 }
 
 }  // namespace lexer
-
-}  // namespace compiler
 
 }  // namespace sundae

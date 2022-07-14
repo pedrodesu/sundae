@@ -94,6 +94,72 @@ TEST(TypeValidation, Strings) {
   EXPECT_EQ(GetType("'hello, world!'"), std::optional{TokenType::kLiteral});
 }
 
+TEST(TypeValidation, Runes) {
+  EXPECT_EQ(GetType("`h`"), std::optional{TokenType::kLiteral});
+}
+
+TEST(TypeValidation, Bools) {
+  EXPECT_EQ(GetType("true"), std::optional{TokenType::kLiteral});
+  EXPECT_EQ(GetType("false"), std::optional{TokenType::kLiteral});
+
+  EXPECT_NE(GetType("trUe"), std::optional{TokenType::kLiteral});
+}
+
+TEST(TypeValidation, Integers) {
+  EXPECT_EQ(GetType("123"), std::optional{TokenType::kLiteral});
+}
+
+TEST(TypeValidation, Floats) {
+  EXPECT_EQ(GetType("123.45"), std::optional{TokenType::kLiteral});
+}
+
+TEST(TypeValidation, BinaryNumbers) {
+  EXPECT_EQ(GetType("0b010101"), std::optional{TokenType::kLiteral});
+}
+
+TEST(TypeValidation, OctalNumbers) {
+  EXPECT_EQ(GetType("0o12345670"), std::optional{TokenType::kLiteral});
+}
+
+TEST(TypeValidation, HexadecimalNumbers) {
+  EXPECT_EQ(GetType("0xffffff"), std::optional{TokenType::kLiteral});
+}
+
+
+TEST(TypeValidation, Keywords) {
+  EXPECT_EQ(GetType("public"), std::optional{TokenType::kKeyword});
+}
+
+
+TEST(TypeValidation, Identifiers) {
+  EXPECT_EQ(GetType("a_var_name"), std::optional{TokenType::kIdentifier});
+}
+
+
+TEST(TypeValidation, Operators) {
+  EXPECT_NE(GetType(":"), std::optional{TokenType::kOperator});
+  EXPECT_EQ(GetType(":="), std::optional{TokenType::kOperator});
+}
+
+
+TEST(TypeValidation, Breakers) {
+  EXPECT_EQ(GetType(","), std::optional{TokenType::kBreaker});
+}
+
+
+TEST(TypeValidation, Newlines) {
+  EXPECT_EQ(GetType("\n"), std::optional{TokenType::kNewline});
+}
+
+
+TEST(TypeValidation, Comments) {
+  EXPECT_EQ(GetType("//inline comment\n"), std::optional{TokenType::kComment});
+
+  EXPECT_EQ(GetType("/* block comment */"), std::optional{TokenType::kComment});
+
+  EXPECT_EQ(GetType("/*multi\nline\n\t\tcomment\n\n*/"), std::optional{TokenType::kComment});
+}
+
 }  // namespace lexer
 
 }  // namespace compiler
