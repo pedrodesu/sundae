@@ -1,0 +1,8 @@
+let add_by_magic = (n i32) i32 {
+    ret n + MAGIC_NUMBER;
+}
+
+let main = () {
+    std.println(add_by_magic(10));
+}
+
