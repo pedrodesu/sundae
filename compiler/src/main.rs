@@ -4,6 +4,7 @@
 use std::{env, fs};
 
 mod lexer;
+mod math_example;
 mod parser;
 
 fn main() {

@@ -10,21 +10,38 @@ pub enum Expression {
     Literal(String),
     Path(Vec<String>),
     Return(Box<Expression>),
-    Binary { lhs: String, op: String, rhs: String },
-    Call { path: Vec<String>, args: Vec<Expression> }
+    Binary {
+        lhs: String,
+        op: String,
+        rhs: String,
+    },
+    Call {
+        path: Vec<String>,
+        args: Vec<Expression>,
+    },
 }
 
 impl Expression {
-    const PARSE_OPTIONS: &[fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<Self>] = &[Self::parse_binary, Self::parse_literal, Self::parse_call, Self::parse_path, Self::parse_return];
+    const PARSE_OPTIONS: &[fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<Self>] = &[
+        Self::parse_binary,
+        Self::parse_literal,
+        Self::parse_call,
+        Self::parse_path,
+        Self::parse_return,
+    ];
 
     #[inline]
     pub fn parse_any(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
-        Self::PARSE_OPTIONS.into_iter().find(|&&f| f(&mut tokens.clone()).is_some())?(tokens)
+        Self::PARSE_OPTIONS
+            .into_iter()
+            .find(|&&f| f(&mut tokens.clone()).is_some())?(tokens)
     }
 
     #[inline]
     fn parse_literal(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
-        Some(Self::Literal(assert_token(tokens, |t| t.r#type == TokenType::Literal)?))
+        Some(Self::Literal(assert_token(tokens, |t| {
+            t.r#type == TokenType::Literal
+        })?))
     }
 
     fn parse_path(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
@@ -47,9 +64,13 @@ impl Expression {
 
     fn parse_binary(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
         // TODO parse_any instead of identifier or literal, binary fn overflow
-        let lhs = assert_token(tokens, |t: &Token| matches!(t.r#type, TokenType::Identifier | TokenType::Literal))?;
+        let lhs = assert_token(tokens, |t: &Token| {
+            matches!(t.r#type, TokenType::Identifier | TokenType::Literal)
+        })?;
         let op = assert_token(tokens, |t: &Token| matches!(t.r#type, TokenType::Operator))?;
-        let rhs = assert_token(tokens, |t: &Token| matches!(t.r#type, TokenType::Identifier | TokenType::Literal))?;
+        let rhs = assert_token(tokens, |t: &Token| {
+            matches!(t.r#type, TokenType::Identifier | TokenType::Literal)
+        })?;
 
         Some(Self::Binary { lhs, op, rhs })
     }
@@ -126,7 +147,9 @@ impl Item {
             buffer
         };
         assert_token(tokens, |t| t.value == ")")?;
-        let r#type = tokens.next_if(|t| t.r#type == TokenType::Identifier).map(|t| t.value);
+        let r#type = tokens
+            .next_if(|t| t.r#type == TokenType::Identifier)
+            .map(|t| t.value);
         assert_token(tokens, |t| t.value == "{")?;
         let body = {
             let mut buffer = Vec::new();

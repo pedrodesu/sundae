@@ -6,9 +6,8 @@ use tabled::Tabled;
 const KEYWORDS: &[&str] = &["const", "let", "ret"];
 
 const OPERATORS: &[&str] = &[
-    "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=",
-    "<", ">", "<=", ">=", "=", "==", "!", "!=", "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=",
-    "|=", "^=",
+    "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=", "<", ">", "<=", ">=", "=", "==", "!",
+    "!=", "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=", "|=", "^=",
 ];
 
 const SEPARATORS: &[&str] = &["(", ")", "{", "}", ",", ";", "."];
@@ -22,7 +21,7 @@ pub enum TokenType {
     Identifier,
     Operator,
     Literal,
-    Separator
+    Separator,
 }
 
 impl fmt::Display for TokenType {

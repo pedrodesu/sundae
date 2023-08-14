@@ -1,5 +1,5 @@
 let add_by_magic = (n i32) i32 {
-    ret n + MAGIC_NUMBER;
+    ret n + MAGIC_NUMBER + 3;
 }
 
 let main = () {
