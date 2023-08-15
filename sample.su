@@ -4,5 +4,5 @@ let add_by_magic = (n i32) i32 {
 
 let main = () {
     std.println(add_by_magic(10));
+    std.println("marloka seso");
 }
-
