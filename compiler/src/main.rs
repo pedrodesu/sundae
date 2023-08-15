@@ -1,10 +1,8 @@
-#![feature(exact_size_is_empty)]
-#![feature(stmt_expr_attributes)]
+#![feature(exact_size_is_empty, stmt_expr_attributes)]
 
 use std::{env, fs};
 
 mod lexer;
-// mod math_example;
 mod parser;
 
 // TODO add comments and integrate math
