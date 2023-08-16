@@ -15,6 +15,8 @@ const SEPARATORS: &[&str] = &["(", ")", "{", "}", ",", ";", "."];
 const STR_DELIM: char = '"';
 const RUNE_DELIM: char = '`';
 
+const COMMENT_PAIRS: &[(&str, &str)] = &[("//", "\n"), ("/*", "*/")];
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum TokenType {
     Keyword,
@@ -22,6 +24,7 @@ pub enum TokenType {
     Operator,
     Literal,
     Separator,
+    Comment,
 }
 
 impl fmt::Display for TokenType {
@@ -35,6 +38,7 @@ impl fmt::Display for TokenType {
                 TokenType::Operator => "Operator",
                 TokenType::Literal => "Literal",
                 TokenType::Separator => "Separator",
+                TokenType::Comment => "Comment",
             }
         )
     }
@@ -67,6 +71,11 @@ impl TryFrom<&str> for TokenType {
         // implement remaining literal patterns
         {
             Ok(TokenType::Literal)
+        } else if COMMENT_PAIRS
+            .into_iter()
+            .any(|p| expression.starts_with(p.0) && expression.ends_with(p.1))
+        {
+            Ok(TokenType::Comment)
         } else {
             Err(())
         }
@@ -98,19 +107,16 @@ impl Iterator for Lexer<'_> {
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
-            let r#type = TokenType::try_from(&*acc);
-            if let Ok(r#type) = r#type {
+            if let Ok(r#type) = TokenType::try_from(&*acc) {
                 if let Some(&next) = self.iterator.peek() {
-                    let next = {
-                        let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
-                        TokenType::try_from(&*next_acc)
-                    };
+                    let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
+                    let next_type = TokenType::try_from(&*next_acc);
 
-                    if !matches!(next, Ok(t) if t == r#type) {
-                        if !matches!(
-                            (r#type, next),
-                            (TokenType::Identifier, Ok(TokenType::Keyword))
-                        ) {
+                    if !next_type.is_ok_and(|t| t == r#type) {
+                        if !((r#type == TokenType::Identifier
+                            && matches!(next_type, Ok(TokenType::Keyword)))
+                            || (COMMENT_PAIRS.into_iter().any(|&p| next_acc == p.0)))
+                        {
                             return Some(Token { value: acc, r#type });
                         }
                     }
@@ -127,5 +133,6 @@ pub fn tokenize(input: &str) -> Vec<Token> {
     Lexer {
         iterator: input.chars().peekable(),
     }
+    .filter(|t| t.r#type != TokenType::Comment)
     .collect()
 }

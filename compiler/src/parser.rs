@@ -11,12 +11,20 @@ pub struct Name(String, String);
 pub enum Expression {
     Literal(String),
     Path(Vec<String>),
-    Return(Box<Expression>),
     Binary(binary::Node),
     Call {
         path: Vec<String>,
         args: Vec<Expression>,
     },
+}
+
+#[inline]
+pub fn test_any<A, B>(it: A, tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<B>
+where
+    A: IntoIterator,
+    A::Item: Fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<B>,
+{
+    it.into_iter().find(|f| f(&mut tokens.clone()).is_some())?(tokens)
 }
 
 impl Expression {
@@ -26,13 +34,6 @@ impl Expression {
         Self::parse_call,
         Self::parse_path,
     ];
-
-    #[inline]
-    pub fn parse_any(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
-        Self::PARSE_OPTIONS
-            .into_iter()
-            .find(|&&f| f(&mut tokens.clone()).is_some())?(tokens)
-    }
 
     #[inline]
     fn parse_literal(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
@@ -72,7 +73,7 @@ impl Expression {
                     assert_token(tokens, |t| t.value == ",")?;
                 }
 
-                let expr = Expression::parse_any(tokens)?;
+                let expr = test_any(Expression::PARSE_OPTIONS, tokens)?;
                 buffer.push(expr);
             }
 
@@ -111,23 +112,18 @@ impl Statement {
     const PARSE_OPTIONS: &[fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<Self>] =
         &[Self::parse_return, Self::parse_expression];
 
-    #[inline]
-    pub fn parse_any(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
-        Self::PARSE_OPTIONS
-            .into_iter()
-            .find(|&&f| f(&mut tokens.clone()).is_some())?(tokens)
-    }
-
     fn parse_return(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
         assert_token(tokens, |t| t.value == "ret")?;
 
-        let expr = Expression::parse_any(tokens)?;
-        Some(Self::Return(expr))
+        Some(Self::Return(test_any(Expression::PARSE_OPTIONS, tokens)?))
     }
 
     #[inline]
     fn parse_expression(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
-        Some(Self::Expression(Expression::parse_any(tokens)?))
+        Some(Self::Expression(test_any(
+            Expression::PARSE_OPTIONS,
+            tokens,
+        )?))
     }
 }
 
@@ -169,7 +165,7 @@ impl Item {
             let mut buffer = Vec::new();
 
             while tokens.peek()?.value != "}" {
-                buffer.push(Statement::parse_any(tokens)?);
+                buffer.push(test_any(Statement::PARSE_OPTIONS, tokens)?);
                 assert_token(tokens, |t| t.value == ";")?;
             }
 

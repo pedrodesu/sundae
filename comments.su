@@ -1,0 +1,15 @@
+// comment
+let main = () {
+    std.println(
+        // d
+        /*
+
+
+            "abc" thtrh
+
+
+            */
+        "Hello world");
+}
+
+// nig

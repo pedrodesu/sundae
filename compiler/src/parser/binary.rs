@@ -1,7 +1,5 @@
 use std::{iter::Peekable, vec};
 
-use crate::lexer::{Token, TokenType};
-
 use super::Expression;
 
 const TERMS: &[Operator] = {
@@ -49,11 +47,11 @@ impl Operator {
     }
 }
 
-impl TryFrom<&Token> for Operator {
+impl TryFrom<&super::Token> for Operator {
     type Error = ();
 
     #[inline]
-    fn try_from(token: &Token) -> Result<Self, Self::Error> {
+    fn try_from(token: &super::Token) -> Result<Self, Self::Error> {
         use Operator::*;
 
         match token.value.as_str() {
@@ -86,12 +84,12 @@ pub enum Node {
 }
 
 struct Parser<'a> {
-    it: &'a mut Peekable<vec::IntoIter<Token>>,
+    it: &'a mut Peekable<vec::IntoIter<super::Token>>,
 }
 
-impl<'a> From<&'a mut Peekable<vec::IntoIter<Token>>> for Parser<'a> {
+impl<'a> From<&'a mut Peekable<vec::IntoIter<super::Token>>> for Parser<'a> {
     #[inline]
-    fn from(it: &'a mut Peekable<vec::IntoIter<Token>>) -> Self {
+    fn from(it: &'a mut Peekable<vec::IntoIter<super::Token>>) -> Self {
         Self { it }
     }
 }
@@ -107,7 +105,11 @@ impl Parser<'_> {
             let next = self.factor()?;
             acc = Node::Compound(Box::new(acc), Operator::try_from(&t).ok()?, Box::new(next));
         }
-        Some(acc)
+        if let Node::Compound(..) = acc {
+            Some(acc)
+        } else {
+            None
+        }
     }
 
     fn factor(&mut self) -> Option<Node> {
@@ -123,27 +125,25 @@ impl Parser<'_> {
         Some(acc)
     }
 
-    // TODO meter qlqr expression aqui
     fn term(&mut self) -> Option<Node> {
-        // Expression::PARSE_OPTIONS;
+        let other_predicates = Expression::PARSE_OPTIONS
+            .into_iter()
+            .filter(|&&f| f != Expression::parse_binary);
 
-        match self.it.next()? {
-            token @ Token {
-                r#type: TokenType::Literal,
-                ..
-            } => Some(Node::Scalar(Box::new(token))),
-            Token { value, .. } if value == "(" => {
-                let exp = self.parse_exp();
-                assert!(matches!(self.it.next(), Some(Token { value, .. }) if value == ")"));
-                exp
-            }
-            _ => None,
+        if let Some(expr) = super::test_any(other_predicates, self.it) {
+            Some(Node::Scalar(Box::new(expr)))
+        } else if matches!(self.it.next()?, super::Token { value, .. } if value == "(") {
+            let exp = self.parse_exp();
+            assert!(matches!(self.it.next(), Some(super::Token { value, .. }) if value == ")"));
+            exp
+        } else {
+            None
         }
     }
 }
 
 // TODO change whole Option API to Result
 #[inline]
-pub fn parse(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Node> {
+pub fn parse(tokens: &mut Peekable<vec::IntoIter<super::Token>>) -> Option<Node> {
     Parser::from(tokens).parse_exp()
 }
