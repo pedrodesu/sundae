@@ -1,5 +1,6 @@
 use std::{fmt, iter::Peekable, str::Chars};
 
+use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use tabled::Tabled;
 
@@ -14,6 +15,8 @@ const SEPARATORS: &[&str] = &["(", ")", "{", "}", ",", ";", "."];
 
 const STR_DELIM: char = '"';
 const RUNE_DELIM: char = '`';
+
+const RESERVED_LITERALS: &[&str] = &["true", "false"];
 
 const COMMENT_PAIRS: &[(&str, &str)] = &[("//", "\n"), ("/*", "*/")];
 
@@ -49,8 +52,7 @@ impl TryFrom<&str> for TokenType {
 
     #[inline]
     fn try_from(expression: &str) -> Result<Self, Self::Error> {
-        let is_delim = #[inline]
-        |delim: char| {
+        let is_delim = |delim: char| {
             expression.starts_with(delim) && expression.ends_with(delim) && expression.len() > 1
         };
 
@@ -66,7 +68,10 @@ impl TryFrom<&str> for TokenType {
             Ok(TokenType::Operator)
         } else if SEPARATORS.contains(&expression) {
             Ok(TokenType::Separator)
-        } else if is_delim(STR_DELIM) || is_delim(RUNE_DELIM) || expression.parse::<f64>().is_ok()
+        } else if is_delim(STR_DELIM)
+            || is_delim(RUNE_DELIM)
+            || expression.parse::<f64>().is_ok()
+            || RESERVED_LITERALS.contains(&expression)
         // TODO implement other number forms and use own checking
         // implement remaining literal patterns
         {
@@ -93,7 +98,7 @@ struct Lexer<'a> {
 }
 
 impl Iterator for Lexer<'_> {
-    type Item = Token;
+    type Item = Result<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut acc = String::new();
@@ -117,11 +122,19 @@ impl Iterator for Lexer<'_> {
                             && matches!(next_type, Ok(TokenType::Keyword)))
                             || (COMMENT_PAIRS.into_iter().any(|&p| next_acc == p.0)))
                         {
-                            return Some(Token { value: acc, r#type });
+                            return Some(Ok(Token { value: acc, r#type }));
                         }
                     }
+                } else {
+                    return Some(Ok(Token { value: acc, r#type }));
                 }
             }
+        }
+
+        if !acc.is_empty() {
+            return Some(Err(anyhow!(
+                "Incomplete expression ({acc:?} is an invalid expression)"
+            )));
         }
 
         None
@@ -129,10 +142,10 @@ impl Iterator for Lexer<'_> {
 }
 
 #[inline(always)]
-pub fn tokenize(input: &str) -> Vec<Token> {
+pub fn tokenize(input: &str) -> Result<Vec<Token>> {
     Lexer {
         iterator: input.chars().peekable(),
     }
-    .filter(|t| t.r#type != TokenType::Comment)
+    // .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment))
     .collect()
 }

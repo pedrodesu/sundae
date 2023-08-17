@@ -77,7 +77,7 @@ impl TryFrom<&super::Token> for Operator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Node {
     Scalar(Box<Expression>),
     Compound(Box<Node>, Operator, Box<Node>),
@@ -97,7 +97,6 @@ impl<'a> From<&'a mut Peekable<vec::IntoIter<super::Token>>> for Parser<'a> {
 impl Parser<'_> {
     pub fn parse_exp(&mut self) -> Option<Node> {
         let mut acc = self.factor()?;
-        // TODO refactor this expression
         while let Some(t) = self
             .it
             .next_if(|t| Operator::try_from(t).is_ok_and(|op| op.is_term()))
@@ -114,7 +113,6 @@ impl Parser<'_> {
 
     fn factor(&mut self) -> Option<Node> {
         let mut acc = self.term()?;
-        // TODO refactor this expression
         while let Some(t) = self
             .it
             .next_if(|t| Operator::try_from(t).is_ok_and(|op| op.is_factor()))

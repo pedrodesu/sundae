@@ -7,7 +7,7 @@ mod binary;
 #[derive(Debug)]
 pub struct Name(String, String);
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expression {
     Literal(String),
     Path(Vec<String>),
@@ -19,10 +19,11 @@ pub enum Expression {
 }
 
 #[inline]
-pub fn test_any<A, B>(it: A, tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<B>
+pub fn test_any<A, B, C>(it: A, tokens: &mut C) -> Option<B>
 where
     A: IntoIterator,
-    A::Item: Fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<B>,
+    A::Item: Fn(&mut C) -> Option<B>,
+    C: IntoIterator<Item = Token> + Clone,
 {
     it.into_iter().find(|f| f(&mut tokens.clone()).is_some())?(tokens)
 }
@@ -188,7 +189,7 @@ pub fn parse(input: Vec<Token>) -> Vec<Item> {
     let mut iterator = input.into_iter().peekable();
     let mut items = Vec::new();
 
-    while !iterator.is_empty() {
+    while iterator.peek().is_some() {
         let x = Item::parse_function(&mut iterator).unwrap();
         items.push(x);
     }
