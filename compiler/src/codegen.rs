@@ -10,7 +10,7 @@ use crate::{
     lexer::LiteralType,
     parser::{
         binary::{Node, Operator},
-        Expression, Item, Name, Signature, Statement, AST,
+        Expression, Item, Signature, Statement, AST,
     },
 };
 
