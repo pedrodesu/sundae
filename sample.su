@@ -1,8 +1,21 @@
-let add_by_magic = (n i32) i32 {
+/*
+func add_by_magic(n i32) i32 {
     ret n + MAGIC_NUMBER / (4 - marloka("seso"));
 }
 
-let main = () {
-    std.println(add_by_magic(10));
+func main() {
+    // std.println(add_by_magic(10));
     std.println("mashallah");
+}
+*/
+
+func fib(num u32) u32 {
+    if num <= 1 {
+        ret num;
+    };
+    ret fib(num - 1) + fib(num - 2);
+}
+
+func main() {
+    fib(5);
 }

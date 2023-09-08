@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use tabled::Tabled;
 
-const KEYWORDS: &[&str] = &["const", "let", "ret"];
+const KEYWORDS: &[&str] = &["const", "let", "func", "ret"];
 
 const OPERATORS: &[&str] = &[
     "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=", "<", ">", "<=", ">=", "=", "==", "!",
@@ -16,16 +16,25 @@ const SEPARATORS: &[&str] = &["(", ")", "{", "}", ",", ";", "."];
 const STR_DELIM: char = '"';
 const RUNE_DELIM: char = '`';
 
-const RESERVED_LITERALS: &[&str] = &["true", "false"];
+const BOOL_VALUES: &[&str] = &["true", "false"];
 
 const COMMENT_PAIRS: &[(&str, &str)] = &[("//", "\n"), ("/*", "*/")];
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum LiteralType {
+    String,
+    Rune,
+    Int,
+    Float,
+    Bool,
+}
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum TokenType {
     Keyword,
     Identifier,
     Operator,
-    Literal,
+    Literal(LiteralType),
     Separator,
     Comment,
 }
@@ -39,7 +48,7 @@ impl fmt::Display for TokenType {
                 TokenType::Keyword => "Keyword",
                 TokenType::Identifier => "Identifier",
                 TokenType::Operator => "Operator",
-                TokenType::Literal => "Literal",
+                TokenType::Literal(_) => "Literal",
                 TokenType::Separator => "Separator",
                 TokenType::Comment => "Comment",
             }
@@ -68,14 +77,18 @@ impl TryFrom<&str> for TokenType {
             Ok(TokenType::Operator)
         } else if SEPARATORS.contains(&expression) {
             Ok(TokenType::Separator)
-        } else if is_delim(STR_DELIM)
-            || is_delim(RUNE_DELIM)
-            || expression.parse::<f64>().is_ok()
-            || RESERVED_LITERALS.contains(&expression)
         // TODO implement other number forms and use own checking
         // implement remaining literal patterns
-        {
-            Ok(TokenType::Literal)
+        } else if is_delim(STR_DELIM) {
+            Ok(TokenType::Literal(LiteralType::String))
+        } else if is_delim(RUNE_DELIM) {
+            Ok(TokenType::Literal(LiteralType::Rune))
+        } else if expression.parse::<i64>().is_ok() {
+            Ok(TokenType::Literal(LiteralType::Int))
+        } else if expression.parse::<f64>().is_ok() {
+            Ok(TokenType::Literal(LiteralType::Float))
+        } else if BOOL_VALUES.contains(&expression) {
+            Ok(TokenType::Literal(LiteralType::Bool))
         } else if COMMENT_PAIRS
             .into_iter()
             .any(|p| expression.starts_with(p.0) && expression.ends_with(p.1))
@@ -146,6 +159,6 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
     Lexer {
         iterator: input.chars().peekable(),
     }
-    // .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment))
+    .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment))
     .collect()
 }
