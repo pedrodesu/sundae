@@ -25,6 +25,8 @@ pub enum Expression {
     },
 }
 
+type Tokens<'a> = &'a mut Peekable<vec::IntoIter<Token>>;
+
 #[inline]
 pub fn test_any<A, B, C>(it: A, tokens: &mut C) -> Option<B>
 where
@@ -36,7 +38,7 @@ where
 }
 
 impl Expression {
-    pub const PARSE_OPTIONS: &'static [fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<Self>] = &[
+    pub const PARSE_OPTIONS: &'static [fn(Tokens) -> Option<Self>] = &[
         Self::parse_if,
         Self::parse_binary,
         Self::parse_literal,
@@ -45,7 +47,7 @@ impl Expression {
     ];
 
     #[inline]
-    fn parse_literal(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_literal(tokens: Tokens) -> Option<Self> {
         let (lit, lit_type) = tokens.next().and_then(|t| {
             if let TokenType::Literal(lit_type) = t.r#type {
                 Some((t.value, lit_type))
@@ -56,7 +58,7 @@ impl Expression {
         Some(Self::Literal(lit, lit_type))
     }
 
-    fn parse_path(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_path(tokens: Tokens) -> Option<Self> {
         let mut path = Vec::new();
 
         while path.is_empty() || tokens.next_if(|t| t.value == ".").is_some() {
@@ -68,11 +70,11 @@ impl Expression {
     }
 
     #[inline]
-    fn parse_binary(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_binary(tokens: Tokens) -> Option<Self> {
         Some(Self::Binary(binary::parse(tokens)?))
     }
 
-    fn parse_call(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_call(tokens: Tokens) -> Option<Self> {
         let Expression::Path(path) = Self::parse_path(tokens)? else {
             unreachable!()
         };
@@ -99,7 +101,7 @@ impl Expression {
         Some(Self::Call { path, args })
     }
 
-    fn parse_if(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_if(tokens: Tokens) -> Option<Self> {
         assert_token(tokens, |t| t.value == "if")?;
 
         let condition = test_any(Expression::PARSE_OPTIONS, tokens)?;
@@ -133,10 +135,7 @@ pub struct Signature {
 }
 
 #[inline]
-fn assert_token(
-    tokens: &mut Peekable<vec::IntoIter<Token>>,
-    predicate: impl Fn(&Token) -> bool,
-) -> Option<String> {
+fn assert_token(tokens: Tokens, predicate: impl Fn(&Token) -> bool) -> Option<String> {
     tokens
         .next()
         .and_then(|t| if predicate(&t) { Some(t.value) } else { None })
@@ -149,10 +148,10 @@ pub enum Statement {
 }
 
 impl Statement {
-    const PARSE_OPTIONS: &'static [fn(&mut Peekable<vec::IntoIter<Token>>) -> Option<Self>] =
+    const PARSE_OPTIONS: &'static [fn(Tokens) -> Option<Self>] =
         &[Self::parse_return, Self::parse_expression];
 
-    fn parse_return(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_return(tokens: Tokens) -> Option<Self> {
         assert_token(tokens, |t| t.value == "ret")?;
 
         let expr = if tokens.peek()?.value != ";" {
@@ -167,7 +166,7 @@ impl Statement {
     }
 
     #[inline]
-    fn parse_expression(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_expression(tokens: Tokens) -> Option<Self> {
         let expr = test_any(Expression::PARSE_OPTIONS, tokens)?;
 
         assert_token(tokens, |t| t.value == ";")?;
@@ -185,7 +184,7 @@ pub enum Item {
 }
 
 impl Item {
-    fn parse_function(tokens: &mut Peekable<vec::IntoIter<Token>>) -> Option<Self> {
+    fn parse_function(tokens: Tokens) -> Option<Self> {
         assert_token(tokens, |t| t.value == "func")?;
         let identifier = assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
         assert_token(tokens, |t| t.value == "(")?;

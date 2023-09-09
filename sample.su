@@ -10,7 +10,8 @@ func main() {
 */
 
 func fib(num u32) u32 {
-    /* some problem happening on writing, probably has to do with resetting builder pos
+    /* some problem happening on writing,
+    probably has to do with resetting builder pos
     if num <= 1 {
         ret num;
     };
