@@ -22,6 +22,7 @@ pub enum Expression {
     If {
         condition: Box<Expression>,
         block: Vec<Statement>,
+        r#else: Option<Vec<Statement>>,
     },
 }
 
@@ -121,9 +122,31 @@ impl Expression {
 
         assert_token(tokens, |t| t.value == "}")?;
 
+        let r#else = if tokens.next_if(|t| t.value == "else").is_some() {
+            assert_token(tokens, |t| t.value == "{")?;
+
+            let block = {
+                let mut buffer = Vec::new();
+
+                while tokens.peek()?.value != "}" {
+                    let stmt = test_any(Statement::PARSE_OPTIONS, tokens)?;
+                    buffer.push(stmt);
+                }
+
+                buffer
+            };
+
+            assert_token(tokens, |t| t.value == "}")?;
+
+            Some(block)
+        } else {
+            None
+        };
+
         Some(Self::If {
             condition: Box::new(condition),
             block,
+            r#else,
         })
     }
 }

@@ -9,10 +9,15 @@ func main() {
 }
 */
 
+func other() u32 {
+    if 2 == 3 {
+        ret 1;
+    } else {
+        ret 2;
+    };
+}
+
 func fib(num u32) u32 {
-    /* some problem happening on writing,
-    probably has to do with resetting builder pos
-    */
     if num <= 1 {
         ret num;
     };
@@ -24,7 +29,7 @@ func fib(num u32) u32 {
         ret fib(num - 1) + fib(num - 2);
     } else {
         ret fib(num - 1) + fib(num - 2);
-    }
+    };
     */
 }
 

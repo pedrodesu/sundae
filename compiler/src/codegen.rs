@@ -9,7 +9,7 @@ use itertools::Itertools;
 use llvm_sys::{
     core::*,
     prelude::{LLVMBuilderRef, LLVMContextRef, LLVMModuleRef, LLVMValueRef},
-    LLVMIntPredicate, LLVMRealPredicate,
+    LLVMIntPredicate,
 };
 
 use crate::{
@@ -286,27 +286,69 @@ fn eval_expression(
                 )
             }
         }
-        Expression::If { condition, block } => {
+        Expression::If {
+            condition,
+            block,
+            r#else,
+        } => {
             let then_block =
-                unsafe { LLVMAppendBasicBlockInContext(*CTX, func, "if\0".as_ptr() as _) };
-            unsafe { LLVMPositionBuilderAtEnd(*BUILDER, then_block) };
+                unsafe { LLVMAppendBasicBlockInContext(*CTX, func, "then\0".as_ptr() as _) };
+            let else_block =
+                unsafe { LLVMAppendBasicBlockInContext(*CTX, func, "else\0".as_ptr() as _) };
 
+            let r#continue = if r#else.is_none() {
+                Some(unsafe {
+                    LLVMAppendBasicBlockInContext(*CTX, func, "continue\0".as_ptr() as _)
+                })
+            } else {
+                None
+            };
+
+            unsafe { LLVMPositionBuilderAtEnd(*BUILDER, then_block) };
+            // insert then statements
+            // TODO should maybe stop generating after first ret instruction? or maybe LLVM can optimise that
             block.into_iter().for_each(|s| {
                 eval_statement(params, func, s);
             });
+            if let Some(r#continue) = r#continue {
+                unsafe {
+                    // then goto exit
+                    LLVMBuildBr(*BUILDER, r#continue);
+                }
+            }
 
-            // the idea here is to create new block for the rest of the code and point condbr else there
+            unsafe {
+                LLVMPositionBuilderAtEnd(*BUILDER, else_block);
+                // else is merely a goto exit (rest of function)
+                if let Some(r#continue) = r#continue {
+                    LLVMBuildBr(*BUILDER, r#continue);
+                } else {
+                    r#else.as_ref().unwrap().into_iter().for_each(|stmt| {
+                        eval_statement(&params, func, &stmt);
+                    });
+                }
+            }
 
             unsafe {
                 LLVMPositionBuilderAtEnd(*BUILDER, LLVMGetEntryBasicBlock(func));
-                // LLVMBuildBr (https://github.com/Virtual-Machine/llvm-tutorial-book/blob/master/chap-7-if-else.md)
+            }
+
+            let cond = unsafe {
                 LLVMBuildCondBr(
                     *BUILDER,
                     eval_expression(params, func, &*condition),
                     then_block,
-                    LLVMCreateBasicBlockInContext(*CTX, "empty\0".as_ptr() as _),
+                    else_block,
                 )
+            };
+
+            if let Some(r#continue) = r#continue {
+                unsafe {
+                    LLVMPositionBuilderAtEnd(*BUILDER, r#continue);
+                }
             }
+
+            cond
         }
     }
 }
@@ -327,7 +369,13 @@ fn put_function(item: Item) {
 
     body.into_iter().for_each(|stmt| {
         eval_statement(&params, func, &stmt);
-    })
+    });
+
+    if signature.name.1.is_none() {
+        unsafe {
+            LLVMBuildRetVoid(*BUILDER);
+        }
+    }
 }
 
 pub fn gen(module: &str, ast: AST) {
