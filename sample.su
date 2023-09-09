@@ -12,11 +12,20 @@ func main() {
 func fib(num u32) u32 {
     /* some problem happening on writing,
     probably has to do with resetting builder pos
+    */
     if num <= 1 {
         ret num;
     };
-    */
     ret fib(num - 1) + fib(num - 2);
+    /*
+    this would be in IR
+    if num <= 1 {
+        ret num;
+        ret fib(num - 1) + fib(num - 2);
+    } else {
+        ret fib(num - 1) + fib(num - 2);
+    }
+    */
 }
 
 func main() {

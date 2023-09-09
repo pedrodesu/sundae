@@ -9,7 +9,7 @@ use itertools::Itertools;
 use llvm_sys::{
     core::*,
     prelude::{LLVMBuilderRef, LLVMContextRef, LLVMModuleRef, LLVMValueRef},
-    LLVMRealPredicate,
+    LLVMIntPredicate, LLVMRealPredicate,
 };
 
 use crate::{
@@ -126,18 +126,23 @@ fn put_function_decl(signature: &Signature) -> LLVMValueRef {
     func
 }
 
-fn eval_binary(params: &HashMap<String, LLVMValueRef>, node: &Node) -> LLVMValueRef {
+fn eval_binary(
+    params: &HashMap<String, LLVMValueRef>,
+    func: LLVMValueRef,
+    node: &Node,
+) -> LLVMValueRef {
     match node {
-        Node::Scalar(s) => eval_expression(params, &*s),
+        Node::Scalar(s) => eval_expression(params, func, &*s),
         Node::Compound(l, op, r) => {
-            let l = match l.deref() {
-                Node::Scalar(l) => eval_expression(params, &*l),
-                c @ Node::Compound(..) => eval_binary(params, &c),
+            let eval_side = |side: &Box<Node>| match side.deref() {
+                Node::Scalar(node) => eval_expression(params, func, &*node),
+                node @ Node::Compound(..) => eval_binary(params, func, &node),
             };
-            let r = match r.deref() {
-                Node::Scalar(r) => eval_expression(params, &*r),
-                c @ Node::Compound(..) => eval_binary(params, &c),
-            };
+
+            let (l, r) = (eval_side(l), eval_side(r));
+
+            // TODO check for and generate according instructions for fp operands
+            // same thing for signed and unsigned predicate types
 
             // TODO read abt difference on mul and div variants and what not
             // and on E/U abt NaN
@@ -158,44 +163,44 @@ fn eval_binary(params: &HashMap<String, LLVMValueRef>, node: &Node) -> LLVMValue
                     // Logical (LShr) vs Arithmetic (AShr) Right Shift
                     Operator::Shr => LLVMBuildLShr(*BUILDER, l, r, "shr\0".as_ptr() as _),
                     Operator::Xor => LLVMBuildXor(*BUILDER, l, r, "xor\0".as_ptr() as _),
-                    Operator::Lt => LLVMBuildFCmp(
+                    Operator::Lt => LLVMBuildICmp(
                         *BUILDER,
-                        LLVMRealPredicate::LLVMRealOLT,
+                        LLVMIntPredicate::LLVMIntULT,
                         l,
                         r,
                         "lt\0".as_ptr() as _,
                     ),
-                    Operator::Gt => LLVMBuildFCmp(
+                    Operator::Gt => LLVMBuildICmp(
                         *BUILDER,
-                        LLVMRealPredicate::LLVMRealOGT,
+                        LLVMIntPredicate::LLVMIntUGT,
                         l,
                         r,
                         "gt\0".as_ptr() as _,
                     ),
-                    Operator::Le => LLVMBuildFCmp(
+                    Operator::Le => LLVMBuildICmp(
                         *BUILDER,
-                        LLVMRealPredicate::LLVMRealOLE,
+                        LLVMIntPredicate::LLVMIntULE,
                         l,
                         r,
                         "le\0".as_ptr() as _,
                     ),
-                    Operator::Ge => LLVMBuildFCmp(
+                    Operator::Ge => LLVMBuildICmp(
                         *BUILDER,
-                        LLVMRealPredicate::LLVMRealOGE,
+                        LLVMIntPredicate::LLVMIntUGE,
                         l,
                         r,
                         "ge\0".as_ptr() as _,
                     ),
-                    Operator::EqEq => LLVMBuildFCmp(
+                    Operator::EqEq => LLVMBuildICmp(
                         *BUILDER,
-                        LLVMRealPredicate::LLVMRealOEQ,
+                        LLVMIntPredicate::LLVMIntEQ,
                         l,
                         r,
                         "eqeq\0".as_ptr() as _,
                     ),
-                    Operator::Neq => LLVMBuildFCmp(
+                    Operator::Neq => LLVMBuildICmp(
                         *BUILDER,
-                        LLVMRealPredicate::LLVMRealONE,
+                        LLVMIntPredicate::LLVMIntNE,
                         l,
                         r,
                         "neq\0".as_ptr() as _,
@@ -208,19 +213,27 @@ fn eval_binary(params: &HashMap<String, LLVMValueRef>, node: &Node) -> LLVMValue
 
 // TODO handle params without saving in HashMap, and then implement funcs with From<> to LLVMValueRef
 
-fn eval_statement(params: &HashMap<String, LLVMValueRef>, stmt: &Statement) -> LLVMValueRef {
+fn eval_statement(
+    params: &HashMap<String, LLVMValueRef>,
+    func: LLVMValueRef,
+    stmt: &Statement,
+) -> LLVMValueRef {
     match stmt {
-        Statement::Expression(expr) => eval_expression(params, expr),
+        Statement::Expression(expr) => eval_expression(params, func, expr),
         Statement::Return(expr) => unsafe {
             match expr {
-                Some(expr) => LLVMBuildRet(*BUILDER, eval_expression(params, expr)),
+                Some(expr) => LLVMBuildRet(*BUILDER, eval_expression(params, func, expr)),
                 None => LLVMBuildRetVoid(*BUILDER),
             }
         },
     }
 }
 
-fn eval_expression(params: &HashMap<String, LLVMValueRef>, expr: &Expression) -> LLVMValueRef {
+fn eval_expression(
+    params: &HashMap<String, LLVMValueRef>,
+    func: LLVMValueRef,
+    expr: &Expression,
+) -> LLVMValueRef {
     match expr {
         Expression::Literal(lit, lit_type) => unsafe {
             match lit_type {
@@ -250,8 +263,8 @@ fn eval_expression(params: &HashMap<String, LLVMValueRef>, expr: &Expression) ->
         },
         Expression::Path(p) => *params.get(&p[0]).unwrap(),
         Expression::Binary(n) => match n {
-            Node::Scalar(s) => eval_expression(params, &*s),
-            n @ Node::Compound(..) => eval_binary(params, n),
+            Node::Scalar(s) => eval_expression(params, func, &*s),
+            n @ Node::Compound(..) => eval_binary(params, func, n),
         },
         Expression::Call { path, args } => {
             let func_name = CString::new(path[0].clone()).unwrap();
@@ -265,7 +278,7 @@ fn eval_expression(params: &HashMap<String, LLVMValueRef>, expr: &Expression) ->
                     func_type,
                     func,
                     args.iter()
-                        .map(|a| eval_expression(params, a))
+                        .map(|a| eval_expression(params, func, a))
                         .collect_vec()
                         .as_mut_ptr(),
                     args.len() as _,
@@ -274,19 +287,24 @@ fn eval_expression(params: &HashMap<String, LLVMValueRef>, expr: &Expression) ->
             }
         }
         Expression::If { condition, block } => {
-            let if_block = unsafe { LLVMCreateBasicBlockInContext(*CTX, "if\0".as_ptr() as _) };
-            unsafe { LLVMPositionBuilderAtEnd(*BUILDER, if_block) };
+            let then_block =
+                unsafe { LLVMAppendBasicBlockInContext(*CTX, func, "if\0".as_ptr() as _) };
+            unsafe { LLVMPositionBuilderAtEnd(*BUILDER, then_block) };
 
             block.into_iter().for_each(|s| {
-                eval_statement(params, s);
+                eval_statement(params, func, s);
             });
 
+            // the idea here is to create new block for the rest of the code and point condbr else there
+
             unsafe {
+                LLVMPositionBuilderAtEnd(*BUILDER, LLVMGetEntryBasicBlock(func));
+                // LLVMBuildBr (https://github.com/Virtual-Machine/llvm-tutorial-book/blob/master/chap-7-if-else.md)
                 LLVMBuildCondBr(
                     *BUILDER,
-                    eval_expression(params, &*condition),
-                    if_block,
-                    std::ptr::null_mut(),
+                    eval_expression(params, func, &*condition),
+                    then_block,
+                    LLVMCreateBasicBlockInContext(*CTX, "empty\0".as_ptr() as _),
                 )
             }
         }
@@ -308,7 +326,7 @@ fn put_function(item: Item) {
         .collect::<HashMap<_, _>>();
 
     body.into_iter().for_each(|stmt| {
-        eval_statement(&params, &stmt);
+        eval_statement(&params, func, &stmt);
     })
 }
 
