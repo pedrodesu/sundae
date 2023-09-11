@@ -9,7 +9,7 @@ mod codegen;
 mod lexer;
 mod parser;
 
-// TODO change lexer to not use ; and use lines as statements. blocks can still be defined with {} (like in golang)
+// TODO change parser to not use ; and use lines as statements. blocks can still be defined with {} (like in golang)
 fn main() -> Result<()> {
     let path = env::args().nth(1).expect("no path");
     let file = fs::read_to_string(&path).expect("couldn't read file");
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     let ast = parser::parse(tokens);
     println!("{:#?}", ast);
 
-    codegen::gen(module, ast);
+    // codegen::gen(module, ast);
 
     Ok(())
 }

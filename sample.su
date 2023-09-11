@@ -1,13 +1,12 @@
+const MAGIC_STR [11]u8 = "Hello world";
+const MAGIC_NUMBER i32 = 42;
+
 /*
 func add_by_magic(n i32) i32 {
     ret n + MAGIC_NUMBER / (4 - marloka("seso"));
 }
-
-func main() {
-    // std.println(add_by_magic(10));
-    std.println("mashallah");
-}
 */
+
 
 func other() u32 {
     if 2 == 3 {
@@ -35,4 +34,9 @@ func fib(num u32) u32 {
 
 func main() {
     fib(5);
+    std.println("mashallah");
+    /*
+    std.println(add_by_magic(10));
+    std.println("mashallah");
+    */
 }

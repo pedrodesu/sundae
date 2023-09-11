@@ -200,6 +200,10 @@ impl Statement {
 
 #[derive(Debug)]
 pub enum Item {
+    Const {
+        name: Name,
+        value: Expression,
+    },
     Function {
         signature: Signature,
         body: Vec<Statement>,
@@ -207,6 +211,44 @@ pub enum Item {
 }
 
 impl Item {
+    const PARSE_OPTIONS: &'static [fn(Tokens) -> Option<Self>] =
+        &[Self::parse_const, Self::parse_function];
+
+    fn parse_const(tokens: Tokens) -> Option<Self> {
+        assert_token(tokens, |t| t.value == "const")?;
+
+        let identifier = assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
+
+        let r#type = {
+            if let Some(r#type) = tokens
+                .next_if(|t| t.r#type == TokenType::Identifier)
+                .map(|t| t.value)
+            {
+                r#type
+            } else {
+                assert_token(tokens, |t| t.value == "[")?;
+                let size =
+                    assert_token(tokens, |t| t.r#type == TokenType::Literal(LiteralType::Int))?;
+                assert_token(tokens, |t| t.value == "]")?;
+                let base_type: String =
+                    assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
+
+                format!("[{size}]{base_type}")
+            }
+        };
+
+        assert_token(tokens, |t| t.value == "=")?;
+
+        let value = test_any(Expression::PARSE_OPTIONS, tokens)?;
+
+        assert_token(tokens, |t| t.value == ";")?;
+
+        Some(Self::Const {
+            name: Name(identifier, r#type),
+            value,
+        })
+    }
+
     fn parse_function(tokens: Tokens) -> Option<Self> {
         assert_token(tokens, |t| t.value == "func")?;
         let identifier = assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
@@ -258,8 +300,7 @@ pub fn parse(input: Vec<Token>) -> AST {
     let mut items = Vec::new();
 
     while iterator.peek().is_some() {
-        let x = Item::parse_function(&mut iterator).unwrap();
-        items.push(x);
+        items.push(test_any(Item::PARSE_OPTIONS, &mut iterator).unwrap());
     }
 
     AST(items)
