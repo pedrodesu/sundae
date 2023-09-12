@@ -37,6 +37,7 @@ pub enum TokenType {
     Literal(LiteralType),
     Separator,
     Comment,
+    Newline,
 }
 
 impl fmt::Display for TokenType {
@@ -51,6 +52,7 @@ impl fmt::Display for TokenType {
                 TokenType::Literal(_) => "Literal",
                 TokenType::Separator => "Separator",
                 TokenType::Comment => "Comment",
+                TokenType::Newline => "Newline",
             }
         )
     }
@@ -147,6 +149,8 @@ impl TryFrom<&str> for TokenType {
             .any(|p| expr.starts_with(p.0) && expr.ends_with(p.1))
         {
             Ok(TokenType::Comment)
+        } else if expr == "\n" {
+            Ok(TokenType::Newline)
         } else {
             Err(())
         }
@@ -169,10 +173,8 @@ impl Iterator for Lexer<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut acc = String::new();
 
-        let _ = self
-            .iterator
-            .by_ref()
-            .peeking_take_while(|&c| c.is_ascii_whitespace())
+        self.iterator
+            .peeking_take_while(|&c| c.is_ascii_whitespace() && c != '\n')
             .for_each(drop);
 
         while let Some(c) = self.iterator.next() {

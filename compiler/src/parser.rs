@@ -1,4 +1,6 @@
-use std::{iter::Peekable, vec};
+use std::{fmt::Debug, iter::Peekable, vec};
+
+use itertools::Itertools;
 
 use crate::lexer::{LiteralType, Token, TokenType};
 
@@ -29,11 +31,62 @@ pub enum Expression {
 type Tokens<'a> = &'a mut Peekable<vec::IntoIter<Token>>;
 
 #[inline]
-pub fn test_any<A, B, C>(it: A, tokens: &mut C) -> Option<B>
+fn ignore_newlines(tokens: Tokens) {
+    tokens
+        .peeking_take_while(|t| t.r#type == TokenType::Newline)
+        .for_each(drop)
+}
+
+fn parse_generic_list<T>(
+    tokens: Tokens,
+    left_bound: &str,
+    right_bound: &str,
+    predicate: impl Fn(Tokens) -> Option<T>,
+    sep_predicate: Option<&str>,
+) -> Option<Vec<T>> {
+    ignore_newlines(tokens);
+
+    assert_token(tokens, |t| t.value == left_bound)?;
+
+    let mut buffer = Vec::new();
+
+    loop {
+        ignore_newlines(tokens);
+
+        if tokens.next_if(|t| t.value == right_bound).is_some() {
+            break;
+        }
+
+        if let Some(sep_predicate) = sep_predicate {
+            if !buffer.is_empty() {
+                assert_token(tokens, |t| t.value == sep_predicate)?;
+            }
+        }
+
+        let value = predicate(tokens)?;
+        buffer.push(value);
+    }
+
+    Some(buffer)
+}
+
+#[inline]
+fn parse_block(tokens: Tokens) -> Option<Vec<Statement>> {
+    parse_generic_list(
+        tokens,
+        "{",
+        "}",
+        |t| test_any(Statement::PARSE_OPTIONS, t),
+        None,
+    )
+}
+
+#[inline]
+pub fn test_any<A, B, C>(it: A, tokens: &mut Peekable<C>) -> Option<B>
 where
     A: IntoIterator,
-    A::Item: Fn(&mut C) -> Option<B>,
-    C: IntoIterator<Item = Token> + Clone,
+    A::Item: Fn(&mut Peekable<C>) -> Option<B>,
+    C: Iterator<Item = Token> + Clone,
 {
     it.into_iter().find(|f| f(&mut tokens.clone()).is_some())?(tokens)
 }
@@ -49,14 +102,15 @@ impl Expression {
 
     #[inline]
     fn parse_literal(tokens: Tokens) -> Option<Self> {
-        let (lit, lit_type) = tokens.next().and_then(|t| {
-            if let TokenType::Literal(lit_type) = t.r#type {
-                Some((t.value, lit_type))
-            } else {
-                None
-            }
-        })?;
-        Some(Self::Literal(lit, lit_type))
+        if let Token {
+            value,
+            r#type: TokenType::Literal(lit_type),
+        } = tokens.next()?
+        {
+            Some(Self::Literal(value, lit_type))
+        } else {
+            None
+        }
     }
 
     fn parse_path(tokens: Tokens) -> Option<Self> {
@@ -80,24 +134,13 @@ impl Expression {
             unreachable!()
         };
 
-        assert_token(tokens, |t| t.value == "(")?;
-
-        let args = {
-            let mut buffer = Vec::new();
-
-            while tokens.peek()?.value != ")" {
-                if !buffer.is_empty() {
-                    assert_token(tokens, |t| t.value == ",")?;
-                }
-
-                let expr = test_any(Expression::PARSE_OPTIONS, tokens)?;
-                buffer.push(expr);
-            }
-
-            buffer
-        };
-
-        assert_token(tokens, |t| t.value == ")")?;
+        let args = parse_generic_list(
+            tokens,
+            "(",
+            ")",
+            |t| test_any(Expression::PARSE_OPTIONS, t),
+            Some(","),
+        )?;
 
         Some(Self::Call { path, args })
     }
@@ -107,38 +150,10 @@ impl Expression {
 
         let condition = test_any(Expression::PARSE_OPTIONS, tokens)?;
 
-        assert_token(tokens, |t| t.value == "{")?;
-
-        let block = {
-            let mut buffer = Vec::new();
-
-            while tokens.peek()?.value != "}" {
-                let stmt = test_any(Statement::PARSE_OPTIONS, tokens)?;
-                buffer.push(stmt);
-            }
-
-            buffer
-        };
-
-        assert_token(tokens, |t| t.value == "}")?;
+        let block = parse_block(tokens)?;
 
         let r#else = if tokens.next_if(|t| t.value == "else").is_some() {
-            assert_token(tokens, |t| t.value == "{")?;
-
-            let block = {
-                let mut buffer = Vec::new();
-
-                while tokens.peek()?.value != "}" {
-                    let stmt = test_any(Statement::PARSE_OPTIONS, tokens)?;
-                    buffer.push(stmt);
-                }
-
-                buffer
-            };
-
-            assert_token(tokens, |t| t.value == "}")?;
-
-            Some(block)
+            parse_block(tokens)
         } else {
             None
         };
@@ -177,13 +192,13 @@ impl Statement {
     fn parse_return(tokens: Tokens) -> Option<Self> {
         assert_token(tokens, |t| t.value == "ret")?;
 
-        let expr = if tokens.peek()?.value != ";" {
+        let expr = if tokens.peek()?.r#type != TokenType::Newline {
             Some(test_any(Expression::PARSE_OPTIONS, tokens)?)
         } else {
             None
         };
 
-        assert_token(tokens, |t| t.value == ";")?;
+        assert_token(tokens, |t| t.r#type == TokenType::Newline)?;
 
         Some(Self::Return(expr))
     }
@@ -192,7 +207,7 @@ impl Statement {
     fn parse_expression(tokens: Tokens) -> Option<Self> {
         let expr = test_any(Expression::PARSE_OPTIONS, tokens)?;
 
-        assert_token(tokens, |t| t.value == ";")?;
+        assert_token(tokens, |t| t.r#type == TokenType::Newline)?;
 
         Some(Self::Expression(expr))
     }
@@ -241,7 +256,7 @@ impl Item {
 
         let value = test_any(Expression::PARSE_OPTIONS, tokens)?;
 
-        assert_token(tokens, |t| t.value == ";")?;
+        assert_token(tokens, |t| t.r#type == TokenType::Newline)?;
 
         Some(Self::Const {
             name: Name(identifier, r#type),
@@ -251,38 +266,27 @@ impl Item {
 
     fn parse_function(tokens: Tokens) -> Option<Self> {
         assert_token(tokens, |t| t.value == "func")?;
+
         let identifier = assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
-        assert_token(tokens, |t| t.value == "(")?;
-        let arguments = {
-            let mut buffer = Vec::new();
 
-            while tokens.peek()?.value != ")" {
-                if !buffer.is_empty() {
-                    assert_token(tokens, |t| t.value == ",")?;
-                }
+        let arguments = parse_generic_list(
+            tokens,
+            "(",
+            ")",
+            |t| {
+                let identifier = assert_token(t, |t| t.r#type == TokenType::Identifier)?;
+                let r#type = assert_token(t, |t| t.r#type == TokenType::Identifier)?;
 
-                let identifier = assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
-                let r#type = assert_token(tokens, |t| t.r#type == TokenType::Identifier)?;
-                buffer.push(Name(identifier, r#type));
-            }
+                Some(Name(identifier, r#type))
+            },
+            Some(","),
+        )?;
 
-            buffer
-        };
-        assert_token(tokens, |t| t.value == ")")?;
         let r#type = tokens
             .next_if(|t| t.r#type == TokenType::Identifier)
             .map(|t| t.value);
-        assert_token(tokens, |t| t.value == "{")?;
-        let body = {
-            let mut buffer = Vec::new();
 
-            while tokens.peek()?.value != "}" {
-                buffer.push(test_any(Statement::PARSE_OPTIONS, tokens)?);
-            }
-
-            buffer
-        };
-        assert_token(tokens, |t| t.value == "}")?;
+        let body = parse_block(tokens)?;
 
         Some(Self::Function {
             signature: Signature {
@@ -300,8 +304,15 @@ pub fn parse(input: Vec<Token>) -> AST {
     let mut items = Vec::new();
 
     while iterator.peek().is_some() {
-        items.push(test_any(Item::PARSE_OPTIONS, &mut iterator).unwrap());
+        if iterator
+            .next_if(|t| t.r#type == TokenType::Newline)
+            .is_none()
+        {
+            items.push(test_any(Item::PARSE_OPTIONS, &mut iterator).unwrap());
+        }
     }
 
     AST(items)
 }
+
+// TODO refine type extracting and definition
