@@ -1,0 +1,44 @@
+// inferred to an array of runes
+const MAGIC_STR = "Hello world"
+// defaults to an i32
+const MAGIC_NUMBER = 42
+
+// T is inferred and doesn't have to be passed in the call
+// it is also const, so must be known at compile time (it's a generic, makes sense) (a type must be const, then)
+// a and b are mutable references to the original values
+func swap(const T type, a &mut T, b &mut T) {
+    let c = *a
+    *a = *b
+    *b = c
+}
+
+func other() u32 {
+    if 2 == 3 {
+        ret 1
+    } else {
+        ret 2
+    }
+}
+
+func fib(num u32) u32 {
+    if num <= 1 {
+        ret num
+    }
+    ret fib(num - 1) + fib(num - 2)
+}
+
+func main() {
+    fib(5)
+
+    let mut a = 46
+    let mut b = 32
+    swap(&mut a, &mut b)
+
+    std.println(a)
+    std.println(b)
+    std.println(-42)
+    std.println(4324.2342)
+    std.println(0xFFFfff)
+    std.println(0b0101)
+    std.println(0o6543210)
+}

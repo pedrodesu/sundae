@@ -1,14 +1,3 @@
-const MAGIC_STR [11]u8 = "Hello world"
-const MAGIC_NUMBER i32 = 42
-
-func other() u32 {
-    if 2 == 3 {
-        ret 1
-    } else {
-        ret 2
-    }
-}
-
 func fib(num u32) u32 {
     if num <= 1 {
         ret num
@@ -18,11 +7,4 @@ func fib(num u32) u32 {
 
 func main() {
     fib(5)
-
-    std.println("mashallah")
-    std.println(-4324)
-    std.println(4324.2342)
-    std.println(0xFFFfff)
-    std.println(0b0101)
-    std.println(0o6543210)
 }
