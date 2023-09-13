@@ -1,11 +1,9 @@
 use crate::lexer::definitions::TokenType;
 
 use super::{
-    consume,
     expression::Expression,
-    peek,
     types::{get_type, Name},
-    Component, TokenIt,
+    Component, TokenIt, TokenItExt,
 };
 
 #[derive(Debug, Clone)]
@@ -35,13 +33,13 @@ impl super::Component for Statement {
 impl Statement {
     #[inline]
     fn common(tokens: TokenIt) -> Option<()> {
-        consume(tokens, |t| t.r#type == TokenType::Newline)?;
+        tokens.consume_token(|t| t.r#type == TokenType::Newline)?;
 
         Some(())
     }
 
     fn parse_return(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "ret")?;
+        tokens.consume_token(|t| t.value == "ret")?;
 
         let expr = if tokens.peek()?.r#type != TokenType::Newline {
             Some(Expression::get(tokens)?)
@@ -67,7 +65,7 @@ impl Statement {
     fn parse_assign(tokens: TokenIt) -> Option<Self> {
         let destination = Expression::get(tokens)?;
 
-        consume(tokens, |t| t.value == "=")?;
+        tokens.consume_token(|t| t.value == "=")?;
 
         let source = Expression::get(tokens)?;
 
@@ -81,17 +79,17 @@ impl Statement {
 
     #[inline]
     fn parse_local(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "let")?;
+        tokens.consume_token(|t| t.value == "let")?;
 
-        let mutable = peek(tokens, |t| t.value == "mut");
+        let mutable = tokens.peek_token(|t| t.value == "mut");
 
-        let identifier = consume(tokens, |t| t.r#type == TokenType::Identifier)?;
+        let identifier = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
 
-        let (r#type, init) = if peek(tokens, |t| t.value == "=") {
+        let (r#type, init) = if tokens.peek_token(|t| t.value == "=") {
             (None, Expression::get(tokens))
         } else {
             let r#type = get_type(tokens);
-            let init = if peek(tokens, |t| t.value == "=") {
+            let init = if tokens.peek_token(|t| t.value == "=") {
                 Expression::get(tokens)
             } else {
                 None

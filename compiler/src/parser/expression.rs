@@ -1,8 +1,6 @@
 use crate::lexer::definitions::{LiteralType, Token, TokenType};
 
-use super::{
-    consume, ignore_newlines, parse_block, parse_generic_list, peek, Component, Statement, TokenIt,
-};
+use super::{Component, Statement, TokenIt, TokenItExt};
 
 mod binary;
 
@@ -47,17 +45,17 @@ impl super::Component for Expression {
 impl Expression {
     #[inline]
     fn parse_reference(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "&")?;
+        tokens.consume_token(|t| t.value == "&")?;
 
         Some(Self::Reference {
-            r#mut: peek(tokens, |t| t.value == "mut"),
+            r#mut: tokens.peek_token(|t| t.value == "mut"),
             value: Box::new(Expression::get(tokens)?),
         })
     }
 
     #[inline]
     fn parse_dereference(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "*")?;
+        tokens.consume_token(|t| t.value == "*")?;
 
         Some(Self::Dereference {
             value: Box::new(Expression::get(tokens)?),
@@ -83,8 +81,8 @@ impl Expression {
     fn parse_path(tokens: TokenIt) -> Option<Self> {
         let mut path = Vec::new();
 
-        while path.is_empty() || peek(tokens, |t| t.value == ".") {
-            let segment = consume(tokens, |t| t.r#type == TokenType::Identifier)?;
+        while path.is_empty() || tokens.peek_token(|t| t.value == ".") {
+            let segment = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
             path.push(segment);
         }
 
@@ -101,23 +99,24 @@ impl Expression {
             unreachable!()
         };
 
-        let args = parse_generic_list(tokens, "(", ")", |t| Expression::get(t), Some(","))?;
+        let args = tokens.parse_generic_list("(", ")", |t| Expression::get(t), Some(","))?;
 
         Some(Self::Call { path, args })
     }
 
     fn parse_if(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "if")?;
+        tokens.consume_token(|t| t.value == "if")?;
 
         let condition = Expression::get(tokens)?;
 
-        let block = parse_block(tokens)?;
+        let block = tokens.parse_block()?;
 
         let mut tokens_clone = tokens.clone();
-        ignore_newlines(&mut tokens_clone);
-        let r#else = if tokens_clone.next_if(|t| t.value == "else").is_some() {
+        tokens_clone.ignore_newlines();
+
+        let r#else = if tokens_clone.peek_token(|t| t.value == "else") {
             *tokens = tokens_clone;
-            parse_block(tokens)
+            tokens.parse_block()
         } else {
             None
         };

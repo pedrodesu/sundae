@@ -1,12 +1,10 @@
 use crate::lexer::definitions::TokenType;
 
 use super::{
-    consume,
     expression::Expression,
-    parse_block, parse_generic_list, peek,
     statement::Statement,
     types::{get_type, Name},
-    Component, TokenIt,
+    Component, TokenIt, TokenItExt,
 };
 
 #[derive(Debug)]
@@ -34,13 +32,13 @@ impl super::Component for Item {
 
 impl Item {
     fn parse_const(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "const")?;
+        tokens.consume_token(|t| t.value == "const")?;
 
-        let identifier = consume(tokens, |t| t.r#type == TokenType::Identifier)?;
+        let identifier = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
 
-        let r#type = if !peek(tokens, |t| t.value == "=") {
+        let r#type = if !tokens.peek_token(|t| t.value == "=") {
             let r#type = get_type(tokens);
-            consume(tokens, |t| t.value == "=")?;
+            tokens.consume_token(|t| t.value == "=")?;
             r#type
         } else {
             None
@@ -48,7 +46,7 @@ impl Item {
 
         let value = Expression::get(tokens)?;
 
-        consume(tokens, |t| t.r#type == TokenType::Newline)?;
+        tokens.consume_token(|t| t.r#type == TokenType::Newline)?;
 
         Some(Self::Const {
             name: Name(identifier, r#type),
@@ -57,16 +55,15 @@ impl Item {
     }
 
     fn parse_function(tokens: TokenIt) -> Option<Self> {
-        consume(tokens, |t| t.value == "func")?;
+        tokens.consume_token(|t| t.value == "func")?;
 
-        let identifier = consume(tokens, |t| t.r#type == TokenType::Identifier)?;
+        let identifier = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
 
-        let arguments = parse_generic_list(
-            tokens,
+        let arguments = tokens.parse_generic_list(
             "(",
             ")",
             |t| {
-                let identifier = consume(t, |t| t.r#type == TokenType::Identifier)?;
+                let identifier = t.consume_token(|t| t.r#type == TokenType::Identifier)?;
                 let r#type = get_type(t);
 
                 Some(Name(identifier, r#type))
@@ -78,7 +75,7 @@ impl Item {
             .next_if(|t| t.r#type == TokenType::Identifier)
             .map(|t| t.value);
 
-        let body = parse_block(tokens)?;
+        let body = tokens.parse_block()?;
 
         Some(Self::Function {
             signature: Signature {

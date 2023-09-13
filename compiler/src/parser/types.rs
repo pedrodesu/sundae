@@ -1,6 +1,6 @@
 use crate::lexer::definitions::{LiteralType, TokenType};
 
-use super::{consume, TokenIt};
+use super::{TokenIt, TokenItExt};
 
 #[derive(Debug, Clone)]
 pub enum BaseType {
@@ -32,12 +32,13 @@ pub(super) fn get_type(tokens: TokenIt<'_>) -> Option<Type> {
             modifier: None,
         })
     } else {
-        consume(tokens, |t| t.value == "[")?;
-        let size = consume(tokens, |t| t.r#type == TokenType::Literal(LiteralType::Int))?
+        tokens.consume_token(|t| t.value == "[")?;
+        let size = tokens
+            .consume_token(|t| t.r#type == TokenType::Literal(LiteralType::Int))?
             .parse()
             .unwrap();
-        consume(tokens, |t| t.value == "]")?;
-        let r#type: String = consume(tokens, |t| t.r#type == TokenType::Identifier)?;
+        tokens.consume_token(|t| t.value == "]")?;
+        let r#type: String = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
 
         Some(Type {
             base: BaseType::Array(r#type, size),
