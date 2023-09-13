@@ -1,4 +1,4 @@
-// inferred to an array of runes
+// inferred to an array of runes ([11]rune)
 const MAGIC_STR = "Hello world"
 // defaults to an i32
 const MAGIC_NUMBER = 42
@@ -6,7 +6,7 @@ const MAGIC_NUMBER = 42
 // T is inferred and doesn't have to be passed in the call
 // it is also const, so must be known at compile time (it's a generic, makes sense) (a type must be const, then)
 // a and b are mutable references to the original values
-func swap(const T type, a &mut T, b &mut T) {
+func swap(T type, a T, b T) {
     let c = *a
     *a = *b
     *b = c

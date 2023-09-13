@@ -1,11 +1,7 @@
-#![feature(ascii_char)]
-#![feature(lazy_cell)]
-
 use std::{env, fs, path::Path};
 
 use anyhow::{Context, Result};
 
-mod codegen;
 mod lexer;
 mod parser;
 
