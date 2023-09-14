@@ -1,8 +1,8 @@
 use crate::lexer::definitions::{LiteralType, Token, TokenType};
 
-use super::{Component, Statement, TokenIt, TokenItExt};
+use super::{Component, Statement, TokenIt, TokenItBaseExt};
 
-mod binary;
+pub mod binary;
 
 #[derive(Clone, Debug)]
 pub enum Expression {
@@ -45,17 +45,17 @@ impl super::Component for Expression {
 impl Expression {
     #[inline]
     fn parse_reference(tokens: TokenIt) -> Option<Self> {
-        tokens.consume_token(|t| t.value == "&")?;
+        tokens.consume(|t| t.value == "&")?;
 
         Some(Self::Reference {
-            r#mut: tokens.peek_token(|t| t.value == "mut"),
+            r#mut: tokens.consume_if(|t| t.value == "mut").is_some(),
             value: Box::new(Expression::get(tokens)?),
         })
     }
 
     #[inline]
     fn parse_dereference(tokens: TokenIt) -> Option<Self> {
-        tokens.consume_token(|t| t.value == "*")?;
+        tokens.consume(|t| t.value == "*")?;
 
         Some(Self::Dereference {
             value: Box::new(Expression::get(tokens)?),
@@ -81,8 +81,8 @@ impl Expression {
     fn parse_path(tokens: TokenIt) -> Option<Self> {
         let mut path = Vec::new();
 
-        while path.is_empty() || tokens.peek_token(|t| t.value == ".") {
-            let segment = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
+        while path.is_empty() || tokens.consume_if(|t| t.value == ".").is_some() {
+            let segment = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
             path.push(segment);
         }
 
@@ -105,7 +105,7 @@ impl Expression {
     }
 
     fn parse_if(tokens: TokenIt) -> Option<Self> {
-        tokens.consume_token(|t| t.value == "if")?;
+        tokens.consume(|t| t.value == "if")?;
 
         let condition = Expression::get(tokens)?;
 
@@ -114,7 +114,7 @@ impl Expression {
         let mut tokens_clone = tokens.clone();
         tokens_clone.ignore_newlines();
 
-        let r#else = if tokens_clone.peek_token(|t| t.value == "else") {
+        let r#else = if tokens_clone.consume_if(|t| t.value == "else").is_some() {
             *tokens = tokens_clone;
             tokens.parse_block()
         } else {

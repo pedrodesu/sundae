@@ -1,11 +1,11 @@
 use crate::lexer::definitions::{LiteralType, TokenType};
 
-use super::{TokenIt, TokenItExt};
+use super::{TokenIt, TokenItBaseExt};
 
 #[derive(Debug, Clone)]
 pub enum BaseType {
-    Array(String, u32),
-    Scalar(String),
+    Array { r#type: String, size: usize },
+    Scalar { r#type: String },
 }
 
 #[derive(Debug, Clone)]
@@ -18,36 +18,61 @@ pub enum Modifiers {
 
 #[derive(Debug, Clone)]
 pub struct Type {
-    base: BaseType,
-    modifier: Option<Modifiers>,
+    pub base: BaseType,
+    pub modifier: Option<Modifiers>,
 }
 
-pub(super) fn get_type(tokens: TokenIt<'_>) -> Option<Type> {
-    if let Some(r#type) = tokens
-        .next_if(|t| t.r#type == TokenType::Identifier)
-        .map(|t| t.value)
-    {
-        Some(Type {
-            base: BaseType::Scalar(r#type),
-            modifier: None,
-        })
-    } else {
-        tokens.consume_token(|t| t.value == "[")?;
-        let size = tokens
-            .consume_token(|t| t.r#type == TokenType::Literal(LiteralType::Int))?
-            .parse()
-            .unwrap();
-        tokens.consume_token(|t| t.value == "]")?;
-        let r#type: String = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
+pub(super) trait TokenItTypeExt {
+    fn get_modifier(self) -> Option<Modifiers>;
 
-        Some(Type {
-            base: BaseType::Array(r#type, size),
-            modifier: None,
-        })
+    fn get_type(self) -> Option<Type>;
+}
+
+impl TokenItTypeExt for TokenIt<'_> {
+    fn get_modifier(self) -> Option<Modifiers> {
+        if self.consume_if(|t| t.value == "const").is_some() {
+            Some(Modifiers::Const)
+        } else if self.consume_if(|t| t.value == "mut").is_some() {
+            Some(Modifiers::Mut)
+        } else if self.consume_if(|t| t.value == "&").is_some() {
+            if self.consume_if(|t| t.value == "mut").is_some() {
+                Some(Modifiers::MutRef)
+            } else {
+                Some(Modifiers::Ref)
+            }
+        } else {
+            None
+        }
+    }
+
+    fn get_type(self) -> Option<Type> {
+        let modifier = self.get_modifier();
+
+        if let Some(r#type) = self.consume_if(|t| t.r#type == TokenType::Identifier) {
+            Some(Type {
+                base: BaseType::Scalar { r#type },
+                modifier,
+            })
+        } else if self.consume_if(|t| t.value == "[").is_some() {
+            let size = self
+                .consume(|t| t.r#type == TokenType::Literal(LiteralType::Int))?
+                .parse()
+                .ok()?;
+            self.consume(|t| t.value == "]")?;
+            let r#type: String = self.consume(|t| t.r#type == TokenType::Identifier)?;
+
+            Some(Type {
+                base: BaseType::Array { r#type, size },
+                modifier,
+            })
+        } else {
+            None
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Name(pub String, pub Option<Type>);
+pub struct ArgumentName(pub String, pub Type);
 
-// TODO solve question of extracting attributes on types (const, mut, &mut and &)
+#[derive(Debug, Clone)]
+pub struct Name(pub String, pub Option<Type>);

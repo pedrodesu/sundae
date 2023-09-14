@@ -2,8 +2,8 @@ use crate::lexer::definitions::TokenType;
 
 use super::{
     expression::Expression,
-    types::{get_type, Name},
-    Component, TokenIt, TokenItExt,
+    types::{Name, TokenItTypeExt},
+    Component, TokenIt, TokenItBaseExt,
 };
 
 #[derive(Debug, Clone)]
@@ -33,13 +33,13 @@ impl super::Component for Statement {
 impl Statement {
     #[inline]
     fn common(tokens: TokenIt) -> Option<()> {
-        tokens.consume_token(|t| t.r#type == TokenType::Newline)?;
+        tokens.consume(|t| t.r#type == TokenType::Newline)?;
 
         Some(())
     }
 
     fn parse_return(tokens: TokenIt) -> Option<Self> {
-        tokens.consume_token(|t| t.value == "ret")?;
+        tokens.consume(|t| t.value == "ret")?;
 
         let expr = if tokens.peek()?.r#type != TokenType::Newline {
             Some(Expression::get(tokens)?)
@@ -65,7 +65,7 @@ impl Statement {
     fn parse_assign(tokens: TokenIt) -> Option<Self> {
         let destination = Expression::get(tokens)?;
 
-        tokens.consume_token(|t| t.value == "=")?;
+        tokens.consume(|t| t.value == "=")?;
 
         let source = Expression::get(tokens)?;
 
@@ -79,17 +79,17 @@ impl Statement {
 
     #[inline]
     fn parse_local(tokens: TokenIt) -> Option<Self> {
-        tokens.consume_token(|t| t.value == "let")?;
+        tokens.consume(|t| t.value == "let")?;
 
-        let mutable = tokens.peek_token(|t| t.value == "mut");
+        let mutable = tokens.consume_if(|t| t.value == "mut").is_some();
 
-        let identifier = tokens.consume_token(|t| t.r#type == TokenType::Identifier)?;
+        let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
-        let (r#type, init) = if tokens.peek_token(|t| t.value == "=") {
+        let (r#type, init) = if tokens.consume_if(|t| t.value == "=").is_some() {
             (None, Expression::get(tokens))
         } else {
-            let r#type = get_type(tokens);
-            let init = if tokens.peek_token(|t| t.value == "=") {
+            let r#type = tokens.get_type();
+            let init = if tokens.consume_if(|t| t.value == "=").is_some() {
                 Expression::get(tokens)
             } else {
                 None

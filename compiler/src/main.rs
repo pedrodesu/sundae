@@ -1,9 +1,12 @@
+#![feature(trait_upcasting)]
+
 use std::{env, fs, path::Path};
 
 use anyhow::{Context, Result};
 
+mod codegen;
 mod lexer;
-mod parser;
+pub mod parser;
 
 fn main() -> Result<()> {
     let path = env::args().nth(1).expect("no path");
@@ -28,7 +31,7 @@ fn main() -> Result<()> {
     let ast = parser::parse(tokens);
     println!("{:#?}", ast);
 
-    // codegen::gen(module, ast);
+    codegen::gen(module, ast);
 
     Ok(())
 }
