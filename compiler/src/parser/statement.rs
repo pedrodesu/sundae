@@ -1,4 +1,4 @@
-use crate::lexer::definitions::TokenType;
+use crate::lexer::definitions::{Token, TokenType};
 
 use super::{
     expression::Expression,
@@ -79,22 +79,20 @@ impl Statement {
 
     #[inline]
     fn parse_local(tokens: TokenIt) -> Option<Self> {
-        tokens.consume(|t| t.value == "let")?;
-
-        let mutable = tokens.consume_if(|t| t.value == "mut").is_some();
-
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
-        let (r#type, init) = if tokens.consume_if(|t| t.value == "=").is_some() {
-            (None, Expression::get(tokens))
+        let mutable = tokens.consume(|t| t.value == "mut").is_some();
+
+        let r#type = if matches!(tokens.peek(), Some(Token { ref value, .. }) if value == ":=") {
+            None
         } else {
-            let r#type = tokens.get_type();
-            let init = if tokens.consume_if(|t| t.value == "=").is_some() {
-                Expression::get(tokens)
-            } else {
-                None
-            };
-            (r#type, init)
+            tokens.get_type()
+        };
+
+        let init = if tokens.consume(|t| t.value == ":=").is_some() {
+            Expression::get(tokens)
+        } else {
+            None
         };
 
         Self::common(tokens)?;

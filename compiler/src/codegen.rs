@@ -4,7 +4,7 @@ use inkwell::{
     module::Module,
     types::{BasicType, BasicTypeEnum, FloatType, IntType, VoidType},
     values::{AnyValue, AsValueRef, BasicValue, BasicValueEnum, FunctionValue},
-    IntPredicate,
+    AddressSpace, IntPredicate,
 };
 
 use crate::{
@@ -38,7 +38,6 @@ impl<'ctx> Codegen<'ctx> {
     #[inline]
     fn int_type(&self, value: &str) -> Option<IntType<'ctx>> {
         match value {
-            "bool" => Some(self.ctx.bool_type()),
             "u8" | "i8" => Some(self.ctx.i8_type()),
             "u16" | "i16" => Some(self.ctx.i16_type()),
             "u32" | "i32" => Some(self.ctx.i32_type()),
@@ -195,27 +194,18 @@ impl<'ctx> Codegen<'ctx> {
             Expression::Literal { value, r#type } => match r#type {
                 LiteralType::String => Some(Box::new(
                     self.ctx
-                        .const_string(&value[1..value.len() - 1].as_bytes(), false),
+                        .const_string(&value[1..value.len() - 1].as_bytes(), true),
                 )),
-                LiteralType::Rune => Some(Box::new(
+                LiteralType::Rune => Some(Box::new({
                     self.ctx
                         .i8_type()
-                        .const_int(value.parse::<u64>().unwrap(), false),
-                )),
+                        .const_int(value.as_bytes()[1].into(), false)
+                })),
                 LiteralType::Int => Some(Box::new(
-                    self.ctx
-                        .i32_type()
-                        .const_int(value.parse::<u64>().unwrap(), false),
+                    self.ctx.i32_type().const_int(value.parse().unwrap(), false),
                 )),
                 LiteralType::Float => Some(Box::new(
-                    self.ctx
-                        .f64_type()
-                        .const_float(value.parse::<f64>().unwrap()),
-                )),
-                LiteralType::Bool => Some(Box::new(
-                    self.ctx
-                        .bool_type()
-                        .const_int(if value == "true" { 1 } else { 0 }, false),
+                    self.ctx.f64_type().const_float(value.parse().unwrap()),
                 )),
             },
             Expression::Path(_) => Some(Box::new(func.get_nth_param(0).unwrap())),
@@ -240,7 +230,15 @@ impl<'ctx> Codegen<'ctx> {
                     "call",
                 );
 
-                Some(Box::new(ret.try_as_basic_value().unwrap_left()))
+                let ret = ret.try_as_basic_value();
+
+                // TODO make this shit better, fucking lifetimes lol
+
+                if ret.is_left() {
+                    Some(Box::new(ret.unwrap_left()))
+                } else {
+                    None
+                }
             }
             Expression::If {
                 condition,
@@ -345,6 +343,7 @@ impl<'ctx> Codegen<'ctx> {
                 let ret_type = signature
                     .name
                     .1
+                    .clone()
                     .and_then(|v| self.returnable_type(v))
                     .unwrap_or_else(|| Returnable::VoidType(self.ctx.void_type()));
 
@@ -367,6 +366,10 @@ impl<'ctx> Codegen<'ctx> {
                 self.builder.position_at_end(block);
 
                 body.into_iter().for_each(|s| self.gen_statement(func, s));
+
+                if signature.name.1.is_none() {
+                    self.builder.build_return(None);
+                }
             }
         }
     }
@@ -381,24 +384,16 @@ pub fn gen(module: &str, ast: AST) {
         builder: ctx.create_builder(),
     };
 
-    // add library?
-    /*
-    unsafe {
-        println!(
-            "{}",
-            LLVMLoadLibraryPermanently("target/debug/libsundae_library.so\0".as_ptr() as _)
-        );
-        let func_type = unsafe {
-            LLVMFunctionType(
-                LLVMVoidType(),
-                [LLVMPointerTypeInContext(*CTX, 4)].as_mut_ptr(),
-                1,
-                false as _,
-            )
-        };
-        LLVMAddFunction(r#mod(), "println\0".as_ptr() as _, func_type);
-    }
-    */
+    // TODO how to extern whole lib
+    // you don't, just extern everything necessary in lib source code and then call it on my exe?
+    codegen.module.add_function(
+        "putd",
+        codegen
+            .ctx
+            .void_type()
+            .fn_type(&[codegen.ctx.i32_type().into()], false),
+        Some(inkwell::module::Linkage::External),
+    );
 
     ast.0.into_iter().for_each(|i| codegen.gen_item(i));
 
@@ -411,3 +406,24 @@ pub fn gen(module: &str, ast: AST) {
 // TODO remain work on codegen and also modularise it
 // also really focus on error handling, this shit cannot pass like this
 // and we're creating code which will break without warning with an invalid syntax
+
+// take some concepts of Icon:
+// propagate errors so as to stop/yield execution
+// binary operations succeed/fail and return rhs
+
+/*
+
+if -2 < -1 < 0 {
+
+}
+
+this executes, if condition will be sequently evaluated to a 'true' (if block)
+
+//
+
+let i = 10
+i = i < find(pat, str)
+
+this executes, i will equal to find output (assign)
+
+*/

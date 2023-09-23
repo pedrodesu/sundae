@@ -48,7 +48,7 @@ impl Expression {
         tokens.consume(|t| t.value == "&")?;
 
         Some(Self::Reference {
-            r#mut: tokens.consume_if(|t| t.value == "mut").is_some(),
+            r#mut: tokens.consume(|t| t.value == "mut").is_some(),
             value: Box::new(Expression::get(tokens)?),
         })
     }
@@ -81,7 +81,7 @@ impl Expression {
     fn parse_path(tokens: TokenIt) -> Option<Self> {
         let mut path = Vec::new();
 
-        while path.is_empty() || tokens.consume_if(|t| t.value == ".").is_some() {
+        while path.is_empty() || tokens.consume(|t| t.value == ".").is_some() {
             let segment = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
             path.push(segment);
         }
@@ -114,7 +114,7 @@ impl Expression {
         let mut tokens_clone = tokens.clone();
         tokens_clone.ignore_newlines();
 
-        let r#else = if tokens_clone.consume_if(|t| t.value == "else").is_some() {
+        let r#else = if tokens_clone.consume(|t| t.value == "else").is_some() {
             *tokens = tokens_clone;
             tokens.parse_block()
         } else {

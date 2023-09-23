@@ -1,6 +1,8 @@
 ; ModuleID = 'sample'
 source_filename = "sample"
 
+declare void @putd(i32)
+
 define i32 @fib(i32 %0) {
 entry:
   %le = icmp sle i32 %0, 1
@@ -24,5 +26,7 @@ continue:                                         ; preds = %else, %then
 
 define void @main() {
 entry:
-  %call = call i32 @fib(i32 5)
+  %call = call i32 @fib(i32 10)
+  call void @putd(i32 %call)
+  ret void
 }

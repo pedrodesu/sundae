@@ -7,5 +7,4 @@ edition = "2021"
 anyhow = "1.0.75"
 itertools = "0.10.5"
 tabled = "0.12.2"
-sundae-library = { path = "../library" }
 inkwell = { version = "0.2.0", features = ["llvm16-0"] }

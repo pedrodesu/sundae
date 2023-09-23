@@ -6,5 +6,5 @@ func fib(num u32) u32 {
 }
 
 func main() {
-    fib(5)
+    putd(fib(10))
 }

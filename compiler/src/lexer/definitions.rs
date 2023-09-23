@@ -2,19 +2,17 @@ use std::fmt;
 
 use tabled::Tabled;
 
-const KEYWORDS: &[&str] = &["const", "let", "func", "ret", "mut"];
+const KEYWORDS: &[&str] = &["const", "func", "ret", "mut"];
 
 const OPERATORS: &[&str] = &[
     "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=", "<", ">", "<=", ">=", "=", "==", "!",
-    "!=", "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=", "|=", "^=",
+    "!=", "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=", "|=", "^=", ":=",
 ];
 
 const SEPARATORS: &[&str] = &["(", ")", "[", "]", "{", "}", ",", ";", "."];
 
 const STR_DELIM: char = '"';
 const RUNE_DELIM: char = '`';
-
-const BOOL_VALUES: &[&str] = &["true", "false"];
 
 const COMMENT_PAIRS: &[(&str, &str)] = &[("//", "\n"), ("/*", "*/")];
 
@@ -36,7 +34,6 @@ pub enum LiteralType {
     Rune,
     Int,
     Float,
-    Bool,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -146,8 +143,6 @@ impl TryFrom<&str> for TokenType {
             Ok(TokenType::Literal(LiteralType::Int))
         } else if Self::is_float(expr) {
             Ok(TokenType::Literal(LiteralType::Float))
-        } else if BOOL_VALUES.contains(&expr) {
-            Ok(TokenType::Literal(LiteralType::Bool))
         } else if OPERATORS.contains(&expr) {
             Ok(TokenType::Operator)
         } else if SEPARATORS.contains(&expr) {

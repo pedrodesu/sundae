@@ -3,11 +3,15 @@ const MAGIC_STR = "Hello world"
 // defaults to an i32
 const MAGIC_NUMBER = 42
 
+func read_fd(fd i32) {
+    file mut := open(fd)
+}
+
 // T is inferred and doesn't have to be passed in the call
 // it is also const, so must be known at compile time (it's a generic, makes sense) (a type must be const, then)
 // a and b are mutable references to the original values
 func swap(T const type, a &mut T, b &mut T) {
-    let c = *a
+    c := *a
     *a = *b
     *b = c
 }
@@ -30,9 +34,11 @@ func fib(num u32) u32 {
 func main() {
     fib(5)
 
-    let mut a = 46
-    let mut b = 32
+    a mut i32 := 46
+    b mut := 32
     swap(&mut a, &mut b)
+
+    other()
 
     std.println(a)
     std.println(b)

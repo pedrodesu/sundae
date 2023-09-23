@@ -36,7 +36,7 @@ impl Item {
 
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
-        let r#type = if tokens.consume_if(|t| t.value == "=").is_none() {
+        let r#type = if tokens.consume(|t| t.value == "=").is_none() {
             let r#type = tokens.get_type();
             tokens.consume(|t| t.value == "=")?;
             r#type

@@ -21,8 +21,6 @@ trait TokenItBaseExt {
 
     fn consume(self, predicate: impl Fn(&Token) -> bool) -> Option<String>;
 
-    fn consume_if(self, predicate: impl Fn(&Token) -> bool) -> Option<String>;
-
     fn parse_generic_list<T>(
         self,
         left_bound: &str,
@@ -43,12 +41,6 @@ impl TokenItBaseExt for TokenIt<'_> {
 
     #[inline]
     fn consume(self, predicate: impl Fn(&Token) -> bool) -> Option<String> {
-        self.next()
-            .and_then(|t| if predicate(&t) { Some(t.value) } else { None })
-    }
-
-    #[inline]
-    fn consume_if(self, predicate: impl Fn(&Token) -> bool) -> Option<String> {
         self.next_if(predicate).map(|t| t.value)
     }
 
@@ -68,7 +60,7 @@ impl TokenItBaseExt for TokenIt<'_> {
         loop {
             self.ignore_newlines();
 
-            if self.consume_if(|t| t.value == right_bound).is_some() {
+            if self.consume(|t| t.value == right_bound).is_some() {
                 break;
             }
 
@@ -108,7 +100,7 @@ pub fn parse(input: Vec<Token>) -> AST {
 
     while iterator.peek().is_some() {
         if iterator
-            .consume_if(|t| t.r#type == TokenType::Newline)
+            .consume(|t| t.r#type == TokenType::Newline)
             .is_none()
         {
             items.push(Item::get(&mut iterator).unwrap());

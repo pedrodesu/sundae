@@ -30,12 +30,12 @@ pub(super) trait TokenItTypeExt {
 
 impl TokenItTypeExt for TokenIt<'_> {
     fn get_modifier(self) -> Option<Modifiers> {
-        if self.consume_if(|t| t.value == "const").is_some() {
+        if self.consume(|t| t.value == "const").is_some() {
             Some(Modifiers::Const)
-        } else if self.consume_if(|t| t.value == "mut").is_some() {
+        } else if self.consume(|t| t.value == "mut").is_some() {
             Some(Modifiers::Mut)
-        } else if self.consume_if(|t| t.value == "&").is_some() {
-            if self.consume_if(|t| t.value == "mut").is_some() {
+        } else if self.consume(|t| t.value == "&").is_some() {
+            if self.consume(|t| t.value == "mut").is_some() {
                 Some(Modifiers::MutRef)
             } else {
                 Some(Modifiers::Ref)
@@ -48,12 +48,12 @@ impl TokenItTypeExt for TokenIt<'_> {
     fn get_type(self) -> Option<Type> {
         let modifier = self.get_modifier();
 
-        if let Some(r#type) = self.consume_if(|t| t.r#type == TokenType::Identifier) {
+        if let Some(r#type) = self.consume(|t| t.r#type == TokenType::Identifier) {
             Some(Type {
                 base: BaseType::Scalar { r#type },
                 modifier,
             })
-        } else if self.consume_if(|t| t.value == "[").is_some() {
+        } else if self.consume(|t| t.value == "[").is_some() {
             let size = self
                 .consume(|t| t.r#type == TokenType::Literal(LiteralType::Int))?
                 .parse()
