@@ -11,13 +11,8 @@ pub enum Expression {
         r#type: LiteralType,
     },
     Path(Vec<String>),
-    Reference {
-        r#mut: bool,
-        value: Box<Expression>,
-    },
-    Dereference {
-        value: Box<Expression>,
-    },
+    Reference(Box<Expression>),
+    Dereference(Box<Expression>),
     Binary(binary::Node),
     Call {
         path: Vec<String>,
@@ -34,9 +29,9 @@ impl super::Component for Expression {
     const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>] = &[
         Self::parse_if,
         Self::parse_binary,
+        Self::parse_literal,
         Self::parse_reference,
         Self::parse_dereference,
-        Self::parse_literal,
         Self::parse_call,
         Self::parse_path,
     ];
@@ -47,19 +42,14 @@ impl Expression {
     fn parse_reference(tokens: TokenIt) -> Option<Self> {
         tokens.consume(|t| t.value == "&")?;
 
-        Some(Self::Reference {
-            r#mut: tokens.consume(|t| t.value == "mut").is_some(),
-            value: Box::new(Expression::get(tokens)?),
-        })
+        Some(Self::Reference(Box::new(Expression::get(tokens)?)))
     }
 
     #[inline]
     fn parse_dereference(tokens: TokenIt) -> Option<Self> {
         tokens.consume(|t| t.value == "*")?;
 
-        Some(Self::Dereference {
-            value: Box::new(Expression::get(tokens)?),
-        })
+        Some(Self::Dereference(Box::new(Expression::get(tokens)?)))
     }
 
     #[inline]

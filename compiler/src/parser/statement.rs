@@ -11,8 +11,8 @@ pub enum Statement {
     Return(Option<Expression>),
     Expression(Expression),
     Assign {
-        destination: Box<Expression>,
-        source: Box<Expression>,
+        destination: Expression,
+        source: Expression,
     },
     Local {
         mutable: bool,
@@ -72,8 +72,8 @@ impl Statement {
         Self::common(tokens)?;
 
         Some(Self::Assign {
-            destination: Box::new(destination),
-            source: Box::new(source),
+            destination,
+            source,
         })
     }
 

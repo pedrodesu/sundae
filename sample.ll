@@ -3,30 +3,34 @@ source_filename = "sample"
 
 declare void @putd(i32)
 
-define i32 @fib(i32 %0) {
+define void @swap(ptr %0, ptr %1) {
 entry:
-  %le = icmp sle i32 %0, 1
-  br i1 %le, label %then, label %else
+  %a = alloca ptr, align 8
+  store ptr %0, ptr %a, align 8
+  %b = alloca ptr, align 8
+  store ptr %1, ptr %b, align 8
 
-then:                                             ; preds = %entry
-  ret i32 %0
-  br label %continue
 
-else:                                             ; preds = %entry
-  br label %continue
-
-continue:                                         ; preds = %else, %then
-  %sub = sub i32 %0, 1
-  %call = call i32 @fib(i32 %sub)
-  %sub1 = sub i32 %0, 2
-  %call2 = call i32 @fib(i32 %sub1)
-  %sum = add i32 %call, %call2
-  ret i32 %sum
+  %c = alloca i32, align 4
+  %a1 = load ptr, ptr %a, align 8
+  store ptr %a1, ptr %c, align 8
+  %b2 = load ptr, ptr %b, align 8
+  store ptr %b2, ptr %a, align 8
+  %c3 = load i32, ptr %c, align 4
+  store i32 %c3, ptr %b, align 4
+  ret void
 }
 
 define void @main() {
 entry:
-  %call = call i32 @fib(i32 10)
-  call void @putd(i32 %call)
+  %a = alloca i32, align 4
+  store i32 10, ptr %a, align 4
+  %b = alloca i32, align 4
+  store i32 32, ptr %b, align 4
+  call void @swap(ptr %a, ptr %b)
+  %a1 = load i32, ptr %a, align 4
+  call void @putd(i32 %a1)
+  %b2 = load i32, ptr %b, align 4
+  call void @putd(i32 %b2)
   ret void
 }

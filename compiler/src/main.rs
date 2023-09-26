@@ -1,3 +1,4 @@
+#![feature(return_position_impl_trait_in_trait)]
 #![feature(trait_upcasting)]
 
 use std::{env, fs, path::Path};
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
     let ast = parser::parse(tokens);
     // println!("{:#?}", ast);
 
-    codegen::gen(module, ast);
+    codegen::gen(module, ast)?;
 
     Ok(())
 }
