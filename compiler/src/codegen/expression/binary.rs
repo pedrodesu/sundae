@@ -1,17 +1,16 @@
-use inkwell::{values::BasicValueEnum, IntPredicate};
+use inkwell::IntPredicate;
 
-use crate::parser::expression::binary::{Node, Operator};
+use crate::{
+    codegen::types::{Type, Value},
+    parser::expression::binary::{Node, Operator},
+};
 
 use super::{Codegen, Function};
 
 use anyhow::Result;
 
 impl<'ctx> Codegen<'ctx> {
-    pub(super) fn gen_binary(
-        &self,
-        func: &mut Function<'ctx>,
-        node: Node,
-    ) -> Result<BasicValueEnum> {
+    pub(super) fn gen_binary(&self, func: &mut Function<'ctx>, node: Node) -> Result<Value<'ctx>> {
         let Node::Compound(l, op, r) = node else {
             unreachable!()
         };
@@ -31,7 +30,7 @@ impl<'ctx> Codegen<'ctx> {
 
         // TODO read abt difference on mul and div variants and what not
         // and on E/U abt NaN
-        Ok(match op {
+        let value = match op {
             Operator::Sum => self.builder.build_int_add(l, r, "sum").into(),
             Operator::Sub => self.builder.build_int_sub(l, r, "sub").into(),
             Operator::Star => self.builder.build_int_mul(l, r, "mul").into(),
@@ -67,6 +66,15 @@ impl<'ctx> Codegen<'ctx> {
                 .builder
                 .build_int_compare(IntPredicate::NE, l, r, "neq")
                 .into(),
+        };
+
+        // TODO use correct type
+        Ok(Value {
+            inner: value,
+            r#type: Type::Integer {
+                width: 32,
+                signed: true,
+            },
         })
     }
 }

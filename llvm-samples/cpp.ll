@@ -50,6 +50,7 @@ define dso_local noundef i32 @main() #5 {
   %2 = alloca i32, align 4
   store i32 10, ptr %1, align 4
   store i32 32, ptr %2, align 4
+  store i32 42, ptr %1, align 4
   %3 = load i32, ptr %1, align 4
   %4 = load i32, ptr %2, align 4
   %5 = call noundef i32 @_Z2opii(i32 noundef %3, i32 noundef %4)

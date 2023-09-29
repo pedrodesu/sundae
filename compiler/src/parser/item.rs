@@ -3,13 +3,13 @@ use crate::lexer::definitions::TokenType;
 use super::{
     expression::Expression,
     statement::Statement,
-    types::{ArgumentName, Name, TokenItTypeExt, Type},
+    types::{ArgumentName, Name, ParserType, TokenItTypeExt},
     Component, TokenIt, TokenItBaseExt,
 };
 
 #[derive(Debug)]
 pub struct Signature {
-    pub name: (String, Option<Type>),
+    pub name: (String, Option<ParserType>),
     pub arguments: Vec<ArgumentName>,
 }
 

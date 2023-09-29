@@ -1,45 +1,33 @@
 use std::collections::HashMap;
 
-use inkwell::{
-    builder::Builder,
-    context::Context,
-    module::Module,
-    types::{BasicTypeEnum, VoidType},
-    values::{FunctionValue, PointerValue},
-};
+use inkwell::{builder::Builder, context::Context, module::Module};
 
 use crate::parser::AST;
 
 use anyhow::Result;
+
+use self::types::Type;
 
 mod expression;
 mod item;
 mod statement;
 mod types;
 
-enum Returnable<'ctx> {
-    BasicType(BasicTypeEnum<'ctx>),
-    VoidType(VoidType<'ctx>),
-}
-
-struct Function<'ctx> {
-    inner: FunctionValue<'ctx>,
-    stack: HashMap<String, (BasicTypeEnum<'ctx>, PointerValue<'ctx>)>,
-}
-
 struct Codegen<'ctx> {
     ctx: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
+    functions: HashMap<String, Type>,
 }
 
 pub fn gen(module: &str, ast: AST) -> Result<()> {
     let ctx = Context::create();
 
-    let codegen = Codegen {
+    let mut codegen = Codegen {
         ctx: &ctx,
         module: ctx.create_module(module),
         builder: ctx.create_builder(),
+        functions: HashMap::new(),
     };
 
     // TODO how to extern whole lib
@@ -65,7 +53,7 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
     Ok(())
 }
 
-// take some concepts of Icon:
+// take some concepts of iconic:
 // propagate errors so as to stop/yield execution
 // binary operations succeed/fail and return rhs
 

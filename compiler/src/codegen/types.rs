@@ -1,32 +1,56 @@
+use std::collections::HashMap;
+
+use anyhow::{anyhow, Result};
 use inkwell::{
     context::Context,
     types::{BasicType, BasicTypeEnum, VoidType},
+    values::{BasicValueEnum, FunctionValue},
     AddressSpace,
 };
 
-use crate::parser::types::{BaseType, Modifiers, Type as ParserType};
+use crate::parser::types::{BaseType, Modifiers, ParserType};
 
+#[derive(Clone)]
 pub enum Type {
     Integer { width: u32, signed: bool },
     Float(u32),
     Void,
     Pointer(Box<Type>),
-    // TODO support Array()
+    Array { scalar: Box<Type>, size: usize },
+}
+
+#[derive(Clone)]
+pub struct Value<'ctx> {
+    pub inner: BasicValueEnum<'ctx>,
+    pub r#type: Type,
+}
+
+pub struct Function<'ctx> {
+    pub inner: FunctionValue<'ctx>,
+    pub stack: HashMap<String, Value<'ctx>>,
 }
 
 impl TryFrom<ParserType> for Type {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(value: ParserType) -> Result<Self, Self::Error> {
         let is_ptr = matches!(value.modifier, Some(Modifiers::Ref | Modifiers::MutRef));
 
         let base = match value.base {
-            BaseType::Array { .. } => todo!(),
+            BaseType::Array { r#type, size } => {
+                let scalar = Box::new(Self::try_from(ParserType {
+                    base: BaseType::Scalar { r#type },
+                    modifier: None,
+                })?);
+                Ok(Self::Array { scalar, size })
+            }
             BaseType::Scalar { r#type } => {
                 let (signedness, bits) = r#type.split_at(1);
                 if matches!(signedness, "u" | "i") {
                     Ok(Self::Integer {
-                        width: bits.parse().map_err(|_| ())?,
+                        width: bits
+                            .parse()
+                            .map_err(|_| anyhow!("Integer with invalid width"))?,
                         signed: signedness == "i",
                     })
                 } else {
@@ -36,7 +60,7 @@ impl TryFrom<ParserType> for Type {
                         "f64" => Ok(Self::Float(64)),
                         "f128" => Ok(Self::Float(128)),
                         "void" => Ok(Self::Void),
-                        _ => Err(()),
+                        _ => Err(anyhow!("Unknown type")),
                     }
                 }
             }
@@ -51,36 +75,33 @@ impl TryFrom<ParserType> for Type {
 }
 
 impl<'ctx> Type {
-    pub fn into_basic_type(self, ctx: &'ctx Context) -> Option<BasicTypeEnum<'ctx>> {
+    pub fn get_basic_type(&self, ctx: &'ctx Context) -> Result<BasicTypeEnum<'ctx>> {
         match self {
-            Self::Integer { width, .. } => Some(
-                match width {
-                    8 => ctx.i8_type(),
-                    16 => ctx.i16_type(),
-                    32 => ctx.i32_type(),
-                    64 => ctx.i64_type(),
-                    128 => ctx.i128_type(),
-                    n => ctx.custom_width_int_type(n),
-                }
-                .into(),
-            ),
-            Self::Float(width) => Some(
-                match width {
-                    16 => ctx.f16_type(),
-                    32 => ctx.f32_type(),
-                    64 => ctx.f64_type(),
-                    128 => ctx.f128_type(),
-                    _ => unreachable!(),
-                }
-                .into(),
-            ),
-            Self::Pointer(inner) => Some(
-                inner
-                    .into_basic_type(ctx)?
-                    .ptr_type(AddressSpace::default())
-                    .into(),
-            ),
-            _ => None,
+            Self::Integer { width, .. } => Ok(match *width {
+                8 => ctx.i8_type(),
+                16 => ctx.i16_type(),
+                32 => ctx.i32_type(),
+                64 => ctx.i64_type(),
+                128 => ctx.i128_type(),
+                n => ctx.custom_width_int_type(n),
+            }
+            .into()),
+            Self::Float(width) => Ok(match *width {
+                16 => ctx.f16_type(),
+                32 => ctx.f32_type(),
+                64 => ctx.f64_type(),
+                128 => ctx.f128_type(),
+                _ => unreachable!(),
+            }
+            .into()),
+            Self::Pointer(inner) => Ok(inner
+                .get_basic_type(ctx)?
+                .ptr_type(AddressSpace::default())
+                .into()),
+            Self::Void => Err(anyhow!(
+                "Trying to use void in a place that requires a non-zero type"
+            )),
+            Self::Array { .. } => todo!(),
         }
     }
 

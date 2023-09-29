@@ -2,13 +2,16 @@ use std::collections::HashMap;
 
 use crate::parser::item::Item;
 
-use super::{types::Type, Codegen, Function};
+use super::{
+    types::{Function, Type, Value},
+    Codegen,
+};
 
 use anyhow::Result;
 use inkwell::types::BasicType;
 
 impl<'ctx> Codegen<'ctx> {
-    pub fn gen_item(&self, item: Item) -> Result<()> {
+    pub fn gen_item(&mut self, item: Item) -> Result<()> {
         match item {
             Item::Const { name, value } => {
                 /*
@@ -31,27 +34,26 @@ impl<'ctx> Codegen<'ctx> {
 
                 // r#const.set_initializer(&codegen.ctx.const_string(b"sex", false));
                 */
+                todo!()
             }
             Item::Function { signature, body } => {
                 let ret_type = signature
                     .name
                     .1
                     .clone()
-                    .and_then(|v| Type::try_from(v).ok())
+                    .map(|v| Type::try_from(v))
+                    .transpose()?
                     .unwrap_or_else(|| Type::Void);
+
+                self.functions
+                    .insert(signature.name.0.clone(), ret_type.clone());
 
                 let params = signature
                     .arguments
                     .clone()
                     .into_iter()
-                    .map(|a| {
-                        Type::try_from(a.1)
-                            .unwrap()
-                            .into_basic_type(self.ctx)
-                            .unwrap()
-                            .into()
-                    })
-                    .collect::<Vec<_>>();
+                    .map(|a| Ok(Type::try_from(a.1)?.get_basic_type(self.ctx)?.into()))
+                    .collect::<Result<Vec<_>>>()?;
 
                 let func_type = match ret_type {
                     Type::Void => ret_type
@@ -59,8 +61,7 @@ impl<'ctx> Codegen<'ctx> {
                         .unwrap()
                         .fn_type(params.as_slice(), false),
                     _ => ret_type
-                        .into_basic_type(self.ctx)
-                        .unwrap()
+                        .get_basic_type(self.ctx)?
                         .fn_type(params.as_slice(), false),
                 };
 
@@ -80,20 +81,28 @@ impl<'ctx> Codegen<'ctx> {
                     .arguments
                     .into_iter()
                     .enumerate()
-                    .for_each(|(i, a)| {
+                    .map(|(i, a)| {
                         let arg = func.get_nth_param(i.try_into().unwrap()).unwrap();
 
-                        let r#type = Type::try_from(a.1)
-                            .unwrap()
-                            .into_basic_type(self.ctx)
-                            .unwrap();
+                        let r#type = Type::try_from(a.1)?;
 
-                        let alloc = self.builder.build_alloca(r#type, a.0.as_str());
+                        let alloc = self
+                            .builder
+                            .build_alloca(r#type.get_basic_type(self.ctx)?, a.0.as_str());
 
                         self.builder.build_store(alloc, arg);
 
-                        wrap.stack.insert(a.0, (r#type, alloc));
-                    });
+                        wrap.stack.insert(
+                            a.0,
+                            Value {
+                                inner: alloc.into(),
+                                r#type,
+                            },
+                        );
+
+                        Ok(())
+                    })
+                    .collect::<Result<_>>()?;
 
                 for statement in body {
                     self.gen_statement(&mut wrap, statement)?;
@@ -102,9 +111,9 @@ impl<'ctx> Codegen<'ctx> {
                 if signature.name.1.is_none() {
                     self.builder.build_return(None);
                 }
+
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }

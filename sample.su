@@ -1,7 +1,11 @@
 func swap(a &mut u32, b &mut u32) {
     c u32 := *a
-    *a = *b
+    *a = *b // a is ptr, *a is i32, how to get original ptr back?
     *b = c
+}
+
+func op(a u32, b u32) u32 {
+    ret a * b
 }
 
 func main() {
@@ -9,10 +13,16 @@ func main() {
     b mut u32 := 32
 
     swap(&a, &b)
-
-    2 + k()
     
     putd(a)
     putd(b)
     // not swapping ?
 }
+
+/*
+stack of swap:
+
+a: Type::Ptr(Type::u32),
+b: Type::Ptr(Type::u32),
+c: Type::u32
+*/

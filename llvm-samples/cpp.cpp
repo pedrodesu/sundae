@@ -18,6 +18,8 @@ int main()
     unsigned int a = 10;
     unsigned int b = 32;
 
+    a = 42;
+
     op(a, b);
 
     swap(a, b);
