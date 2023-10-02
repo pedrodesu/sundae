@@ -1,31 +1,15 @@
-use crate::lexer::definitions::TokenType;
-
-use super::{
-    expression::Expression,
-    statement::Statement,
-    types::{ArgumentName, Name, ParserType, TokenItTypeExt},
-    Component, TokenIt, TokenItBaseExt,
+use crate::{
+    components::{
+        parser_types::{ArgumentName, Name, TokenItTypeExt},
+        Expression,
+    },
+    lexer::definitions::TokenType,
+    parser::{Component, TokenIt, TokenItBaseExt},
 };
 
-#[derive(Debug)]
-pub struct Signature {
-    pub name: (String, Option<ParserType>),
-    pub arguments: Vec<ArgumentName>,
-}
+use super::{Item, Signature};
 
-#[derive(Debug)]
-pub enum Item {
-    Const {
-        name: Name,
-        value: Expression,
-    },
-    Function {
-        signature: Signature,
-        body: Vec<Statement>,
-    },
-}
-
-impl super::Component for Item {
+impl Component for Item {
     const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>] =
         &[Self::parse_const, Self::parse_function];
 }

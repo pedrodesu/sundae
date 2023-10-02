@@ -65,9 +65,10 @@ define dso_local noundef i32 @main() #5 {
 define linkonce_odr dso_local void @_Z4swapIjEvRT_S1_(ptr noundef nonnull align 4 dereferenceable(4) %0, ptr noundef nonnull align 4 dereferenceable(4) %1) #4 comdat {
   %3 = alloca ptr, align 8
   %4 = alloca ptr, align 8
-  %5 = alloca i32, align 4
   store ptr %0, ptr %3, align 8
   store ptr %1, ptr %4, align 8
+
+  %5 = alloca i32, align 4
   %6 = load ptr, ptr %3, align 8
   %7 = load i32, ptr %6, align 4
   store i32 %7, ptr %5, align 4

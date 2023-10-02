@@ -1,27 +1,15 @@
-use crate::lexer::definitions::{Token, TokenType};
-
-use super::{
-    expression::Expression,
-    types::{Name, TokenItTypeExt},
-    Component, TokenIt, TokenItBaseExt,
+use crate::{
+    components::{
+        parser_types::{Name, TokenItTypeExt},
+        Expression,
+    },
+    lexer::definitions::{Token, TokenType},
+    parser::{Component, TokenIt, TokenItBaseExt},
 };
 
-#[derive(Debug, Clone)]
-pub enum Statement {
-    Return(Option<Expression>),
-    Expression(Expression),
-    Assign {
-        destination: Expression,
-        source: Expression,
-    },
-    Local {
-        mutable: bool,
-        name: Name,
-        init: Option<Expression>,
-    },
-}
+use super::Statement;
 
-impl super::Component for Statement {
+impl Component for Statement {
     const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>] = &[
         Self::parse_return,
         Self::parse_expression,

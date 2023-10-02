@@ -11,13 +11,8 @@ entry:
   store ptr %1, ptr %b, align 8
   %c = alloca i32, align 4
   %a1 = load ptr, ptr %a, align 8
-  store ptr %a1, ptr %c, align 8
-  %a2 = load ptr, ptr %a, align 8
-  %b3 = load ptr, ptr %b, align 8
-  store ptr %b3, ptr %a2, align 8
-  %b4 = load ptr, ptr %b, align 8
-  %c5 = load i32, ptr %c, align 4
-  store i32 %c5, ptr %b4, align 4
+  %deref = load i32, ptr %a1, align 4
+  store i32 %deref, ptr %c, align 4
   ret void
 }
 
@@ -36,7 +31,8 @@ entry:
 define void @main() {
 entry:
   %a = alloca i32, align 4
-  store i32 10, ptr %a, align 4
+  %call = call i32 @op(i32 10, i32 4)
+  store i32 %call, ptr %a, align 4
   %b = alloca i32, align 4
   store i32 32, ptr %b, align 4
   %a1 = load i32, ptr %a, align 4

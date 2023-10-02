@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use crate::parser::item::Item;
-
-use super::{
-    types::{Function, Type, Value},
-    Codegen,
+use crate::{
+    codegen::Codegen,
+    components::codegen_types::{Function, Type, Value},
 };
 
 use anyhow::Result;
 use inkwell::types::BasicType;
+
+use super::Item;
 
 impl<'ctx> Codegen<'ctx> {
     pub fn gen_item(&mut self, item: Item) -> Result<()> {

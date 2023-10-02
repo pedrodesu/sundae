@@ -1,6 +1,7 @@
-use crate::lexer::definitions::{LiteralType, TokenType};
-
-use super::{TokenIt, TokenItBaseExt};
+use crate::{
+    lexer::definitions::{LiteralType, TokenType},
+    parser::{TokenIt, TokenItBaseExt},
+};
 
 #[derive(Debug, Clone)]
 pub enum BaseType {

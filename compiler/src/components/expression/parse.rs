@@ -1,31 +1,11 @@
-use crate::lexer::definitions::{LiteralType, Token, TokenType};
+use crate::{
+    lexer::definitions::{Token, TokenType},
+    parser::{Component, TokenIt, TokenItBaseExt},
+};
 
-use super::{Component, Statement, TokenIt, TokenItBaseExt};
+use super::Expression;
 
-pub mod binary;
-
-#[derive(Clone, Debug)]
-pub enum Expression {
-    Literal {
-        value: String,
-        r#type: LiteralType,
-    },
-    Path(Vec<String>),
-    Reference(Box<Expression>),
-    Dereference(Box<Expression>),
-    Binary(binary::Node),
-    Call {
-        path: Vec<String>,
-        args: Vec<Expression>,
-    },
-    If {
-        condition: Box<Expression>,
-        block: Vec<Statement>,
-        else_block: Option<Vec<Statement>>,
-    },
-}
-
-impl super::Component for Expression {
+impl Component for Expression {
     const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>] = &[
         Self::parse_if,
         Self::parse_binary,
@@ -81,7 +61,7 @@ impl Expression {
 
     #[inline]
     pub fn parse_binary(tokens: TokenIt) -> Option<Self> {
-        Some(Self::Binary(binary::parse(tokens)?))
+        Some(Self::Binary(super::binary::parse::parse(tokens)?))
     }
 
     fn parse_call(tokens: TokenIt) -> Option<Self> {

@@ -2,21 +2,17 @@ use std::{fmt::Debug, iter::Peekable, vec};
 
 use itertools::Itertools;
 
-use crate::lexer::definitions::{Token, TokenType};
-
-use self::{item::Item, statement::Statement};
-
-pub mod expression;
-pub mod item;
-pub mod statement;
-pub mod types;
+use crate::{
+    components::{Item, Statement},
+    lexer::definitions::{Token, TokenType},
+};
 
 #[derive(Debug)]
 pub struct AST(pub Vec<Item>);
 
-type TokenIt<'a> = &'a mut Peekable<vec::IntoIter<Token>>;
+pub type TokenIt<'a> = &'a mut Peekable<vec::IntoIter<Token>>;
 
-trait TokenItBaseExt {
+pub trait TokenItBaseExt {
     fn ignore_newlines(self);
 
     fn consume(self, predicate: impl Fn(&Token) -> bool) -> Option<String>;
@@ -83,7 +79,7 @@ impl TokenItBaseExt for TokenIt<'_> {
     }
 }
 
-trait Component: Sized + 'static {
+pub trait Component: Sized + 'static {
     const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>];
 
     fn get(tokens: TokenIt) -> Option<Self> {

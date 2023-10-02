@@ -1,12 +1,12 @@
-use crate::parser::statement::Statement;
-
-use super::{
-    types::{Function, Type, Value},
-    Codegen,
-};
-
 use anyhow::{bail, Result};
 use inkwell::values::BasicValueEnum;
+
+use crate::{
+    codegen::Codegen,
+    components::codegen_types::{Function, Type, Value},
+};
+
+use super::Statement;
 
 impl<'ctx> Codegen<'ctx> {
     pub fn gen_statement(&self, func: &mut Function<'ctx>, statement: Statement) -> Result<()> {

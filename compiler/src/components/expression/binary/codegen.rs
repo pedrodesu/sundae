@@ -1,16 +1,16 @@
 use inkwell::IntPredicate;
 
-use crate::{
-    codegen::types::{Type, Value},
-    parser::expression::binary::{Node, Operator},
-};
-
-use super::{Codegen, Function};
-
 use anyhow::Result;
 
+use crate::{
+    codegen::Codegen,
+    components::codegen_types::{Function, Type, Value},
+};
+
+use super::{Node, Operator};
+
 impl<'ctx> Codegen<'ctx> {
-    pub(super) fn gen_binary(&self, func: &mut Function<'ctx>, node: Node) -> Result<Value<'ctx>> {
+    pub fn gen_binary(&self, func: &mut Function<'ctx>, node: Node) -> Result<Value<'ctx>> {
         let Node::Compound(l, op, r) = node else {
             unreachable!()
         };

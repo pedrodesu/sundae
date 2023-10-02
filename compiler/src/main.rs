@@ -6,8 +6,9 @@ use std::{env, fs, path::Path};
 use anyhow::{Context, Result};
 
 mod codegen;
+mod components;
 mod lexer;
-pub mod parser;
+mod parser;
 
 fn main() -> Result<()> {
     let path = env::args().nth(1).expect("no path");
@@ -36,3 +37,7 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
+// TODO clean internal organisation
+// inkwell's no advantage, dump it for llvm-sys with latest llvm version
+// adhere to syntax on sample.su

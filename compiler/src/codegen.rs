@@ -2,22 +2,15 @@ use std::collections::HashMap;
 
 use inkwell::{builder::Builder, context::Context, module::Module};
 
-use crate::parser::AST;
+use crate::{components::codegen_types::Type, parser::AST};
 
 use anyhow::Result;
 
-use self::types::Type;
-
-mod expression;
-mod item;
-mod statement;
-mod types;
-
-struct Codegen<'ctx> {
-    ctx: &'ctx Context,
-    module: Module<'ctx>,
-    builder: Builder<'ctx>,
-    functions: HashMap<String, Type>,
+pub struct Codegen<'ctx> {
+    pub ctx: &'ctx Context,
+    pub module: Module<'ctx>,
+    pub builder: Builder<'ctx>,
+    pub functions: HashMap<String, Type>,
 }
 
 pub fn gen(module: &str, ast: AST) -> Result<()> {

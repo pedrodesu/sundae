@@ -1,14 +1,13 @@
 use anyhow::{anyhow, bail, Result};
 use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
 
-use crate::{lexer::definitions::LiteralType, parser::expression::Expression};
-
-use super::{
-    types::{Function, Type, Value},
-    Codegen,
+use crate::{
+    codegen::Codegen,
+    components::codegen_types::{Function, Type, Value},
+    lexer::definitions::LiteralType,
 };
 
-mod binary;
+use super::Expression;
 
 impl<'ctx> Codegen<'ctx> {
     #[inline]

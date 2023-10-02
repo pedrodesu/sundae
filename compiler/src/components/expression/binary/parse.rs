@@ -1,9 +1,10 @@
 use crate::{
+    components::Expression,
     lexer::definitions::Token,
     parser::{Component, TokenIt},
 };
 
-use super::Expression;
+use super::{Node, Operator};
 
 const TERMS: &[Operator] = {
     use Operator::*;
@@ -16,27 +17,6 @@ const FACTORS: &[Operator] = {
     use Operator::*;
     &[Star, Div]
 };
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Operator {
-    Sum,
-    Sub,
-    Star,
-    Div,
-    And,
-    Or,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-    EqEq,
-    Neq,
-    Shl,
-    Shr,
-    ShAnd,
-    ShOr,
-    Xor,
-}
 
 impl Operator {
     #[inline]
@@ -78,12 +58,6 @@ impl TryFrom<&Token> for Operator {
             _ => Err(()),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub enum Node {
-    Scalar(Box<Expression>),
-    Compound(Box<Node>, Operator, Box<Node>),
 }
 
 struct Parser<'a> {
@@ -137,9 +111,9 @@ impl Parser<'_> {
 
         if let Some(expr) = test {
             Some(Node::Scalar(Box::new(expr)))
-        } else if matches!(self.it.next()?, super::Token { value, .. } if value == "(") {
+        } else if matches!(self.it.next()?, Token { value, .. } if value == "(") {
             let exp = self.consume();
-            if matches!(self.it.next(), Some(super::Token { value, .. }) if value == ")") {
+            if matches!(self.it.next(), Some(Token { value, .. }) if value == ")") {
                 exp
             } else {
                 None
@@ -151,6 +125,6 @@ impl Parser<'_> {
 }
 
 #[inline]
-pub(super) fn parse(tokens: TokenIt) -> Option<Node> {
+pub fn parse(tokens: TokenIt) -> Option<Node> {
     Parser::from(tokens).consume()
 }

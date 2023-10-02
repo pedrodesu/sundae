@@ -8,7 +8,7 @@ use inkwell::{
     AddressSpace,
 };
 
-use crate::parser::types::{BaseType, Modifiers, ParserType};
+use super::parser_types::{BaseType, Modifiers, ParserType};
 
 #[derive(Clone)]
 pub enum Type {
