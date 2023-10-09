@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
-use inkwell::{
-    context::Context,
-    types::{BasicType, BasicTypeEnum, VoidType},
-    values::{BasicValueEnum, FunctionValue},
-    AddressSpace,
+use llvm_sys::{
+    core::{
+        LLVMDoubleTypeInContext, LLVMFP128TypeInContext, LLVMFloatTypeInContext,
+        LLVMHalfTypeInContext, LLVMInt128TypeInContext, LLVMInt16TypeInContext,
+        LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext,
+        LLVMIntTypeInContext, LLVMPointerType, LLVMVoidTypeInContext,
+    },
+    prelude::{LLVMContextRef, LLVMTypeRef, LLVMValueRef},
 };
 
 use super::parser_types::{BaseType, Modifiers, ParserType};
@@ -20,14 +23,14 @@ pub enum Type {
 }
 
 #[derive(Clone)]
-pub struct Value<'ctx> {
-    pub inner: BasicValueEnum<'ctx>,
+pub struct Value {
+    pub inner: LLVMValueRef,
     pub r#type: Type,
 }
 
-pub struct Function<'ctx> {
-    pub inner: FunctionValue<'ctx>,
-    pub stack: HashMap<String, Value<'ctx>>,
+pub struct Function {
+    pub inner: LLVMValueRef,
+    pub stack: HashMap<String, Value>,
 }
 
 impl TryFrom<ParserType> for Type {
@@ -74,42 +77,29 @@ impl TryFrom<ParserType> for Type {
     }
 }
 
-impl<'ctx> Type {
-    pub fn get_basic_type(&self, ctx: &'ctx Context) -> Result<BasicTypeEnum<'ctx>> {
-        match self {
-            Self::Integer { width, .. } => Ok(match *width {
-                8 => ctx.i8_type(),
-                16 => ctx.i16_type(),
-                32 => ctx.i32_type(),
-                64 => ctx.i64_type(),
-                128 => ctx.i128_type(),
-                n => ctx.custom_width_int_type(n),
+impl Type {
+    pub fn get_type(&self, ctx: LLVMContextRef) -> LLVMTypeRef {
+        unsafe {
+            match self {
+                Self::Integer { width, .. } => match *width {
+                    8 => LLVMInt8TypeInContext(ctx),
+                    16 => LLVMInt16TypeInContext(ctx),
+                    32 => LLVMInt32TypeInContext(ctx),
+                    64 => LLVMInt64TypeInContext(ctx),
+                    128 => LLVMInt128TypeInContext(ctx),
+                    n => LLVMIntTypeInContext(ctx, n),
+                },
+                Self::Float(width) => match *width {
+                    16 => LLVMHalfTypeInContext(ctx),
+                    32 => LLVMFloatTypeInContext(ctx),
+                    64 => LLVMDoubleTypeInContext(ctx),
+                    128 => LLVMFP128TypeInContext(ctx),
+                    _ => unreachable!(),
+                },
+                Self::Pointer(inner) => LLVMPointerType(inner.get_type(ctx), 0),
+                Self::Void => LLVMVoidTypeInContext(ctx),
+                Self::Array { .. } => todo!(),
             }
-            .into()),
-            Self::Float(width) => Ok(match *width {
-                16 => ctx.f16_type(),
-                32 => ctx.f32_type(),
-                64 => ctx.f64_type(),
-                128 => ctx.f128_type(),
-                _ => unreachable!(),
-            }
-            .into()),
-            Self::Pointer(inner) => Ok(inner
-                .get_basic_type(ctx)?
-                .ptr_type(AddressSpace::default())
-                .into()),
-            Self::Void => Err(anyhow!(
-                "Trying to use void in a place that requires a non-zero type"
-            )),
-            Self::Array { .. } => todo!(),
-        }
-    }
-
-    pub fn into_void_type(self, ctx: &'ctx Context) -> Option<VoidType<'ctx>> {
-        if matches!(self, Self::Void) {
-            return Some(ctx.void_type());
-        } else {
-            None
         }
     }
 }

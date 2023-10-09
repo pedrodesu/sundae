@@ -49,7 +49,6 @@ impl Statement {
         Some(Self::Expression(expr))
     }
 
-    #[inline]
     fn parse_assign(tokens: TokenIt) -> Option<Self> {
         let destination = Expression::get(tokens)?;
 
@@ -65,7 +64,6 @@ impl Statement {
         })
     }
 
-    #[inline]
     fn parse_local(tokens: TokenIt) -> Option<Self> {
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 

@@ -11,8 +11,7 @@ entry:
   store ptr %1, ptr %b, align 8
   %c = alloca i32, align 4
   %a1 = load ptr, ptr %a, align 8
-  %deref = load i32, ptr %a1, align 4
-  store i32 %deref, ptr %c, align 4
+  store ptr %a1, ptr %c, align 8
   ret void
 }
 
@@ -36,15 +35,11 @@ entry:
   %b = alloca i32, align 4
   store i32 32, ptr %b, align 4
   %a1 = load i32, ptr %a, align 4
-  %ref = alloca i32, align 4
-  store i32 %a1, ptr %ref, align 4
   %b2 = load i32, ptr %b, align 4
-  %ref3 = alloca i32, align 4
-  store i32 %b2, ptr %ref3, align 4
-  call void @swap(ptr %ref, ptr %ref3)
+  %call3 = call void @swap(i32 %a1, i32 %b2)
   %a4 = load i32, ptr %a, align 4
-  call void @putd(i32 %a4)
-  %b5 = load i32, ptr %b, align 4
-  call void @putd(i32 %b5)
+  %call5 = call void @putd(i32 %a4)
+  %b6 = load i32, ptr %b, align 4
+  %call7 = call void @putd(i32 %b6)
   ret void
 }

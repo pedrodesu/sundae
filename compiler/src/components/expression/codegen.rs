@@ -1,5 +1,16 @@
+use std::ffi::CString;
+
 use anyhow::{anyhow, bail, Result};
-use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
+use llvm_sys::{
+    core::{
+        LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildBr, LLVMBuildCall2,
+        LLVMBuildCondBr, LLVMBuildLoad2, LLVMBuildStore, LLVMConstInt, LLVMConstStringInContext,
+        LLVMDoubleTypeInContext, LLVMGetFirstBasicBlock, LLVMGetNamedFunction, LLVMGetTypeKind,
+        LLVMGlobalGetValueType, LLVMInt32TypeInContext, LLVMInt8TypeInContext,
+        LLVMPositionBuilderAtEnd, LLVMTypeOf,
+    },
+    LLVMTypeKind,
+};
 
 use crate::{
     codegen::Codegen,
@@ -9,38 +20,37 @@ use crate::{
 
 use super::Expression;
 
-impl<'ctx> Codegen<'ctx> {
-    #[inline]
-    pub fn assure_int_expr(expr: Result<Value<'ctx>>) -> Result<IntValue<'ctx>> {
-        if let BasicValueEnum::IntValue(v) = expr?.inner {
-            Ok(v)
-        } else {
-            bail!("Expression asks for an int")
-        }
-    }
-
+impl Codegen {
     #[inline]
     pub fn gen_non_void_expression(
         &self,
-        func: &mut Function<'ctx>,
+        func: &mut Function,
         expression: Expression,
-    ) -> Result<Value<'ctx>> {
+    ) -> Result<Value> {
         self.gen_expression(func, expression)
             .and_then(|e| e.ok_or(anyhow!("Using a void value as expression")))
     }
 
     pub fn gen_expression(
         &self,
-        func: &mut Function<'ctx>,
+        func: &mut Function,
         expression: Expression,
-    ) -> Result<Option<Value<'ctx>>> {
+    ) -> Result<Option<Value>> {
         Ok(match expression {
             Expression::Literal { value, r#type } => Some(match r#type {
                 LiteralType::String => {
-                    let bytes = value[1..value.len() - 1].as_bytes();
+                    let bytes = &value[1..value.len() - 1];
 
                     Value {
-                        inner: self.ctx.const_string(bytes, true).into(),
+                        inner: unsafe {
+                            let content = CString::new(bytes).unwrap();
+                            LLVMConstStringInContext(
+                                self.ctx,
+                                content.as_ptr(),
+                                bytes.len() as _,
+                                true as _,
+                            )
+                        },
                         r#type: Type::Array {
                             scalar: Box::new(Type::Integer {
                                 width: 8,
@@ -51,48 +61,58 @@ impl<'ctx> Codegen<'ctx> {
                     }
                 }
                 LiteralType::Rune => Value {
-                    inner: self
-                        .ctx
-                        .i8_type()
-                        .const_int(value.as_bytes()[1].into(), false)
-                        .into(),
+                    inner: unsafe {
+                        LLVMConstInt(
+                            LLVMInt8TypeInContext(self.ctx),
+                            value.as_bytes()[1] as _,
+                            false as _,
+                        )
+                    },
                     r#type: Type::Integer {
                         width: 8,
                         signed: true,
                     },
                 },
                 LiteralType::Int => Value {
-                    inner: self
-                        .ctx
-                        .i32_type()
-                        .const_int(value.parse().unwrap(), false)
-                        .into(),
+                    inner: unsafe {
+                        LLVMConstInt(
+                            LLVMInt32TypeInContext(self.ctx),
+                            value.parse::<i32>().unwrap() as _,
+                            false as _,
+                        )
+                    },
                     r#type: Type::Integer {
                         width: 32,
                         signed: true,
                     },
                 },
                 LiteralType::Float => Value {
-                    inner: self
-                        .ctx
-                        .f64_type()
-                        .const_float(value.parse().unwrap())
-                        .into(),
+                    inner: unsafe {
+                        LLVMConstInt(
+                            LLVMDoubleTypeInContext(self.ctx),
+                            value.parse::<f64>().unwrap() as _,
+                            false as _,
+                        )
+                    },
                     r#type: Type::Float(64),
                 },
             }),
             Expression::Reference(expr) => {
                 let expr = self.gen_non_void_expression(func, *expr)?;
 
-                let alloc = self
-                    .builder
-                    .build_alloca(expr.r#type.get_basic_type(self.ctx)?, "ref");
-                self.builder.build_store(alloc, expr.inner);
+                unsafe {
+                    let alloc = LLVMBuildAlloca(
+                        self.builder,
+                        expr.r#type.get_type(self.ctx),
+                        "ref\0".as_ptr() as _,
+                    );
+                    LLVMBuildStore(self.builder, expr.inner, alloc);
 
-                Some(Value {
-                    inner: alloc.as_basic_value_enum(),
-                    r#type: Type::Pointer(Box::new(expr.r#type)),
-                })
+                    Some(Value {
+                        inner: alloc,
+                        r#type: Type::Pointer(Box::new(expr.r#type)),
+                    })
+                }
             }
             Expression::Dereference(expr) => {
                 let expr = self.gen_non_void_expression(func, *expr)?;
@@ -103,11 +123,14 @@ impl<'ctx> Codegen<'ctx> {
                     bail!("Trying to dereference non-reference")
                 };
 
-                let value = self.builder.build_load(
-                    pointee_type.clone().get_basic_type(self.ctx)?,
-                    expr.inner.into_pointer_value(),
-                    "deref",
-                );
+                let value = unsafe {
+                    LLVMBuildLoad2(
+                        self.builder,
+                        pointee_type.get_type(self.ctx),
+                        expr.inner,
+                        "deref\0".as_ptr() as _,
+                    )
+                };
 
                 Some(Value {
                     inner: value,
@@ -124,11 +147,15 @@ impl<'ctx> Codegen<'ctx> {
                     .clone();
 
                 Some(Value {
-                    inner: self.builder.build_load(
-                        lookup.r#type.get_basic_type(self.ctx)?,
-                        lookup.inner.into_pointer_value(),
-                        name,
-                    ),
+                    inner: unsafe {
+                        let name = CString::new(name.as_str()).unwrap();
+                        LLVMBuildLoad2(
+                            self.builder,
+                            lookup.r#type.get_type(self.ctx),
+                            lookup.inner,
+                            name.as_ptr(),
+                        )
+                    },
                     r#type: lookup.r#type,
                 })
             }
@@ -136,30 +163,42 @@ impl<'ctx> Codegen<'ctx> {
             Expression::Call { path, args } => {
                 let name = path.last().unwrap();
 
-                let function = self
-                    .module
-                    .get_function(name)
-                    .ok_or_else(|| anyhow!("Function `{}` not found", name))?;
+                let function = unsafe {
+                    let name = CString::new(name.as_str()).unwrap();
+                    LLVMGetNamedFunction(self.module, name.as_ptr())
+                };
 
-                let ret = self.builder.build_call(
-                    function,
-                    args.into_iter()
-                        .map(|e| {
-                            self.gen_non_void_expression(func, e)
-                                .map(|v| v.inner.into())
-                        })
-                        .collect::<Result<Vec<_>>>()?
-                        .as_slice(),
-                    "call",
-                );
+                if function.is_null() {
+                    bail!("Function `{}` not found", name);
+                }
 
-                let ret = ret.try_as_basic_value();
+                let ret = unsafe {
+                    LLVMBuildCall2(
+                        self.builder,
+                        LLVMGlobalGetValueType(function),
+                        function,
+                        args.clone()
+                            .into_iter()
+                            .map(|e| {
+                                self.gen_non_void_expression(func, e)
+                                    .map(|v| v.inner.into())
+                            })
+                            .collect::<Result<Vec<_>>>()?
+                            .as_mut_ptr(),
+                        args.len() as _,
+                        "call\0".as_ptr() as _,
+                    )
+                };
 
                 // TODO make this shit better, fucking lifetimes lol
-
-                if ret.is_left() {
+                if unsafe {
+                    !matches!(
+                        LLVMGetTypeKind(LLVMTypeOf(ret)),
+                        LLVMTypeKind::LLVMVoidTypeKind
+                    )
+                } {
                     Some(Value {
-                        inner: ret.unwrap_left(),
+                        inner: ret,
                         r#type: self.functions.get(name).unwrap().clone(),
                     })
                 } else {
@@ -171,30 +210,48 @@ impl<'ctx> Codegen<'ctx> {
                 block,
                 else_block,
             } => {
-                let then = self.ctx.append_basic_block(func.inner, "then");
-                let r#else = self.ctx.append_basic_block(func.inner, "else");
+                let then = unsafe {
+                    LLVMAppendBasicBlockInContext(self.ctx, func.inner, "then\0".as_ptr() as _)
+                };
+                let r#else = unsafe {
+                    LLVMAppendBasicBlockInContext(self.ctx, func.inner, "else\0".as_ptr() as _)
+                };
 
                 // TODO optimise else conds
                 let r#continue = if else_block.is_none() {
-                    Some(self.ctx.append_basic_block(func.inner, "continue"))
+                    Some(unsafe {
+                        LLVMAppendBasicBlockInContext(
+                            self.ctx,
+                            func.inner,
+                            "continue\0".as_ptr() as _,
+                        )
+                    })
                 } else {
                     None
                 };
 
-                self.builder.position_at_end(then);
+                unsafe {
+                    LLVMPositionBuilderAtEnd(self.builder, then);
+                }
 
                 for statement in block {
                     self.gen_statement(func, statement)?;
                 }
 
                 if let Some(r#continue) = r#continue {
-                    self.builder.build_unconditional_branch(r#continue);
+                    unsafe {
+                        LLVMBuildBr(self.builder, r#continue);
+                    }
                 }
 
-                self.builder.position_at_end(r#else);
+                unsafe {
+                    LLVMPositionBuilderAtEnd(self.builder, r#else);
+                }
 
                 if let Some(r#continue) = r#continue {
-                    self.builder.build_unconditional_branch(r#continue);
+                    unsafe {
+                        LLVMBuildBr(self.builder, r#continue);
+                    }
                 } else {
                     else_block
                         .unwrap()
@@ -203,17 +260,19 @@ impl<'ctx> Codegen<'ctx> {
                         .collect::<Result<_>>()?;
                 }
 
-                self.builder
-                    .position_at_end(func.inner.get_first_basic_block().unwrap());
+                unsafe {
+                    LLVMPositionBuilderAtEnd(self.builder, LLVMGetFirstBasicBlock(func.inner));
 
-                self.builder.build_conditional_branch(
-                    Self::assure_int_expr(self.gen_non_void_expression(func, *condition))?,
-                    then,
-                    r#else,
-                );
+                    LLVMBuildCondBr(
+                        self.builder,
+                        self.gen_non_void_expression(func, *condition)?.inner,
+                        then,
+                        r#else,
+                    );
+                }
 
                 if let Some(r#continue) = r#continue {
-                    self.builder.position_at_end(r#continue);
+                    unsafe { LLVMPositionBuilderAtEnd(self.builder, r#continue) };
                 }
 
                 None

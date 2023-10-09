@@ -1,6 +1,11 @@
-use inkwell::IntPredicate;
-
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use llvm_sys::{
+    core::{
+        LLVMBuildAdd, LLVMBuildAnd, LLVMBuildICmp, LLVMBuildLShr, LLVMBuildMul, LLVMBuildOr,
+        LLVMBuildSDiv, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor,
+    },
+    LLVMIntPredicate,
+};
 
 use crate::{
     codegen::Codegen,
@@ -9,63 +14,88 @@ use crate::{
 
 use super::{Node, Operator};
 
-impl<'ctx> Codegen<'ctx> {
-    pub fn gen_binary(&self, func: &mut Function<'ctx>, node: Node) -> Result<Value<'ctx>> {
+impl Codegen {
+    pub fn gen_binary(&self, func: &mut Function, node: Node) -> Result<Value> {
         let Node::Compound(l, op, r) = node else {
             unreachable!()
         };
 
         let mut eval_side = |side: Box<Node>| match *side {
-            Node::Scalar(node) => self.gen_non_void_expression(func, *node),
-            node @ Node::Compound(..) => self.gen_binary(func, node),
+            Node::Scalar(node) => self
+                .gen_expression(func, *node)
+                .map(|v| v.ok_or(anyhow!("Expected return value from expression"))),
+            node @ Node::Compound(..) => self.gen_binary(func, node).map(Ok),
         };
 
-        let (l, r) = (
-            Self::assure_int_expr(eval_side(l))?,
-            Self::assure_int_expr(eval_side(r))?,
-        );
+        let (l, r) = (eval_side(l)??.inner, eval_side(r)??.inner);
 
         // TODO check for and generate according instructions for fp operands
         // same thing for signed and unsigned predicate types
 
         // TODO read abt difference on mul and div variants and what not
         // and on E/U abt NaN
-        let value = match op {
-            Operator::Sum => self.builder.build_int_add(l, r, "sum").into(),
-            Operator::Sub => self.builder.build_int_sub(l, r, "sub").into(),
-            Operator::Star => self.builder.build_int_mul(l, r, "mul").into(),
-            Operator::Div => self.builder.build_int_signed_div(l, r, "div").into(),
-            // LLVM doesn't implement && or ||, rather they work like & and | to bools (i1)
-            Operator::And | Operator::ShAnd => self.builder.build_and(l, r, "and").into(),
-            Operator::Or | Operator::ShOr => self.builder.build_or(l, r, "or").into(),
-            Operator::Shl => self.builder.build_left_shift(l, r, "shl").into(),
-            // Logical (LShr) vs Arithmetic (AShr) Right Shift
-            Operator::Shr => self.builder.build_right_shift(l, r, false, "shr").into(),
-            Operator::Xor => self.builder.build_xor(l, r, "xor").into(),
-            Operator::Lt => self
-                .builder
-                .build_int_compare(IntPredicate::SLT, l, r, "lt")
-                .into(),
-            Operator::Gt => self
-                .builder
-                .build_int_compare(IntPredicate::SGT, l, r, "gt")
-                .into(),
-            Operator::Le => self
-                .builder
-                .build_int_compare(IntPredicate::SLE, l, r, "le")
-                .into(),
-            Operator::Ge => self
-                .builder
-                .build_int_compare(IntPredicate::SGE, l, r, "ge")
-                .into(),
-            Operator::EqEq => self
-                .builder
-                .build_int_compare(IntPredicate::EQ, l, r, "eqeq")
-                .into(),
-            Operator::Neq => self
-                .builder
-                .build_int_compare(IntPredicate::NE, l, r, "neq")
-                .into(),
+        let value = unsafe {
+            match op {
+                Operator::Sum => LLVMBuildAdd(self.builder, l, r, "sum\0".as_ptr() as _),
+                Operator::Sub => LLVMBuildSub(self.builder, l, r, "sub\0".as_ptr() as _),
+                Operator::Star => LLVMBuildMul(self.builder, l, r, "mul\0".as_ptr() as _),
+                Operator::Div => LLVMBuildSDiv(self.builder, l, r, "div\0".as_ptr() as _),
+                // LLVM doesn't implement && or ||, rather they work like & and | to bools (i1)
+                Operator::And | Operator::ShAnd => {
+                    LLVMBuildAnd(self.builder, l, r, "and\0".as_ptr() as _)
+                }
+
+                Operator::Or | Operator::ShOr => {
+                    LLVMBuildOr(self.builder, l, r, "or\0".as_ptr() as _)
+                }
+
+                Operator::Shl => LLVMBuildShl(self.builder, l, r, "shl\0".as_ptr() as _),
+                // Logical (LShr) vs Arithmetic (AShr) Right Shift
+                Operator::Shr => LLVMBuildLShr(self.builder, l, r, "shr\0".as_ptr() as _),
+                Operator::Xor => LLVMBuildXor(self.builder, l, r, "xor\0".as_ptr() as _),
+                Operator::Lt => LLVMBuildICmp(
+                    self.builder,
+                    LLVMIntPredicate::LLVMIntSLT,
+                    l,
+                    r,
+                    "lt\0".as_ptr() as _,
+                ),
+                Operator::Gt => LLVMBuildICmp(
+                    self.builder,
+                    LLVMIntPredicate::LLVMIntSGT,
+                    l,
+                    r,
+                    "gt\0".as_ptr() as _,
+                ),
+                Operator::Le => LLVMBuildICmp(
+                    self.builder,
+                    LLVMIntPredicate::LLVMIntSLE,
+                    l,
+                    r,
+                    "le\0".as_ptr() as _,
+                ),
+                Operator::Ge => LLVMBuildICmp(
+                    self.builder,
+                    LLVMIntPredicate::LLVMIntSGE,
+                    l,
+                    r,
+                    "ge\0".as_ptr() as _,
+                ),
+                Operator::EqEq => LLVMBuildICmp(
+                    self.builder,
+                    LLVMIntPredicate::LLVMIntEQ,
+                    l,
+                    r,
+                    "eqeq\0".as_ptr() as _,
+                ),
+                Operator::Neq => LLVMBuildICmp(
+                    self.builder,
+                    LLVMIntPredicate::LLVMIntNE,
+                    l,
+                    r,
+                    "neq\0".as_ptr() as _,
+                ),
+            }
         };
 
         // TODO use correct type

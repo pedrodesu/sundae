@@ -39,5 +39,4 @@ fn main() -> Result<()> {
 }
 
 // TODO clean internal organisation
-// inkwell's no advantage, dump it for llvm-sys with latest llvm version
 // adhere to syntax on sample.su

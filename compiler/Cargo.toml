@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 itertools = "0.10.5"
+llvm-sys = { version = "170.0.0", features = ["prefer-dynamic"] }
 tabled = "0.12.2"
-inkwell = { version = "0.2.0", features = ["llvm16-0"] }

@@ -1,47 +1,76 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ffi::CString};
 
-use inkwell::{builder::Builder, context::Context, module::Module};
+use llvm_sys::{
+    bit_writer::LLVMWriteBitcodeToFile,
+    core::{
+        LLVMAddFunction, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext,
+        LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMInt32TypeInContext,
+        LLVMModuleCreateWithName, LLVMPrintModuleToFile, LLVMVoidTypeInContext,
+    },
+    prelude::{LLVMBuilderRef, LLVMContextRef, LLVMModuleRef},
+};
 
 use crate::{components::codegen_types::Type, parser::AST};
 
 use anyhow::Result;
 
-pub struct Codegen<'ctx> {
-    pub ctx: &'ctx Context,
-    pub module: Module<'ctx>,
-    pub builder: Builder<'ctx>,
+pub struct Codegen {
+    pub ctx: LLVMContextRef,
+    pub module: LLVMModuleRef,
+    pub builder: LLVMBuilderRef,
     pub functions: HashMap<String, Type>,
 }
 
-pub fn gen(module: &str, ast: AST) -> Result<()> {
-    let ctx = Context::create();
+impl Drop for Codegen {
+    fn drop(&mut self) {
+        unsafe {
+            LLVMDisposeBuilder(self.builder);
+            LLVMDisposeModule(self.module);
+            LLVMContextDispose(self.ctx);
+        }
+    }
+}
 
-    let mut codegen = Codegen {
-        ctx: &ctx,
-        module: ctx.create_module(module),
-        builder: ctx.create_builder(),
-        functions: HashMap::new(),
+pub fn gen(module: &str, ast: AST) -> Result<()> {
+    let mut codegen = unsafe {
+        let ctx = LLVMContextCreate();
+
+        let module = CString::new(module).unwrap();
+
+        Codegen {
+            ctx,
+            module: LLVMModuleCreateWithName(module.as_ptr()),
+            builder: LLVMCreateBuilderInContext(ctx),
+            functions: HashMap::new(),
+        }
     };
 
     // TODO how to extern whole lib
     // you don't, just extern everything necessary in lib source code and then call it on my exe?
-    codegen.module.add_function(
-        "putd",
-        codegen
-            .ctx
-            .void_type()
-            .fn_type(&[codegen.ctx.i32_type().into()], false),
-        Some(inkwell::module::Linkage::External),
-    );
+    unsafe {
+        LLVMAddFunction(
+            codegen.module,
+            b"putd\0".as_ptr() as _,
+            LLVMFunctionType(
+                LLVMVoidTypeInContext(codegen.ctx),
+                [LLVMInt32TypeInContext(codegen.ctx)].as_mut_ptr(),
+                1 as _,
+                false as _,
+            ),
+        );
+    }
 
     for item in ast.0 {
         codegen.gen_item(item)?;
     }
 
-    codegen
-        .module
-        .print_to_file(format!("{module}.ll"))
-        .unwrap();
+    unsafe {
+        let path = CString::new(format!("{module}.ll")).unwrap();
+        LLVMPrintModuleToFile(codegen.module, path.as_ptr(), std::ptr::null_mut());
+
+        let path = CString::new(format!("{module}.bc")).unwrap();
+        LLVMWriteBitcodeToFile(codegen.module, path.as_ptr());
+    }
 
     Ok(())
 }
