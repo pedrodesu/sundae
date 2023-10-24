@@ -7,8 +7,9 @@ use crate::{
 
 use anyhow::Result;
 use llvm_sys::core::{
-    LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildRetVoid,
-    LLVMBuildStore, LLVMFunctionType, LLVMGetParam, LLVMPositionBuilderAtEnd,
+    LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildRet,
+    LLVMBuildRetVoid, LLVMBuildStore, LLVMConstInt, LLVMFunctionType, LLVMGetParam,
+    LLVMPositionBuilderAtEnd,
 };
 
 use super::Item;
@@ -40,13 +41,21 @@ impl Codegen {
                 todo!()
             }
             Item::Function { signature, body } => {
-                let ret_type = signature
-                    .name
-                    .1
-                    .clone()
-                    .map(|v| Type::try_from(v))
-                    .transpose()?
-                    .unwrap_or_else(|| Type::Void);
+                // TODO should replace all "default" 32 with ptr type? make sure..
+                let ret_type = if signature.name.0 == "main" {
+                    Type::Integer {
+                        width: 32,
+                        signed: true,
+                    }
+                } else {
+                    signature
+                        .name
+                        .1
+                        .clone()
+                        .map(|v| Type::try_from(v))
+                        .transpose()?
+                        .unwrap_or_else(|| Type::Void)
+                };
 
                 self.functions
                     .insert(signature.name.0.clone(), ret_type.clone());
@@ -66,7 +75,7 @@ impl Codegen {
                         false as _,
                     );
 
-                    let name = CString::new(signature.name.0).unwrap();
+                    let name = CString::new(signature.name.0.clone()).unwrap();
 
                     LLVMAddFunction(self.module, name.as_ptr(), func_type)
                 };
@@ -118,7 +127,14 @@ impl Codegen {
                     self.gen_statement(&mut wrap, statement)?;
                 }
 
-                if signature.name.1.is_none() {
+                if signature.name.0 == "main" {
+                    unsafe {
+                        LLVMBuildRet(
+                            self.builder,
+                            LLVMConstInt(ret_type.get_type(self.ctx), 0, true as _),
+                        );
+                    }
+                } else if signature.name.1.is_none() {
                     unsafe {
                         LLVMBuildRetVoid(self.builder);
                     }

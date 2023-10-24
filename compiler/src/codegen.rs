@@ -133,10 +133,15 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
             return Err(err_obj);
         }
 
-        let exec = Command::new("clang-17")
+        // See https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/back/link.rs#L1280
+        // order of priority on *nix cc -> lld -> ld
+        // on msvc is lld -> link.exe
+        // fuck other platforms for now
+        // TODO consider mold?
+        let exec = Command::new("cc")
             .args([
-                "target/debug/libsundae_library.so",
                 &format!("output/{module}.o"),
+                "target/debug/libsundae_library.so",
                 "-o",
                 &format!("output/{module}"),
             ])

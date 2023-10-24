@@ -15,7 +15,7 @@ entry:
   ret i32 %mul
 }
 
-define void @main() {
+define i32 @main() {
 entry:
   %a = alloca i32, align 4
   %call = call i32 @op(i32 10, i32 4)
@@ -26,5 +26,5 @@ entry:
   %call2 = call void @putd(i32 %a1)
   %b3 = load i32, ptr %b, align 4
   %call4 = call void @putd(i32 %b3)
-  ret void
+  ret i32 0
 }
