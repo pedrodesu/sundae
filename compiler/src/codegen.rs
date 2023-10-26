@@ -12,6 +12,7 @@ use llvm_sys::{
         LLVMVoidTypeInContext,
     },
     prelude::{LLVMBuilderRef, LLVMContextRef, LLVMModuleRef},
+    support::LLVMLoadLibraryPermanently,
     target::{LLVM_InitializeAllAsmPrinters, LLVM_InitializeNativeTarget},
     target_machine::{
         LLVMCodeGenFileType, LLVMCodeGenOptLevel, LLVMCodeModel, LLVMCreateTargetMachine,
@@ -57,35 +58,7 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
 
     // TODO how to extern whole lib
     // you don't, just extern everything necessary in lib source code and then call it on my exe?
-    unsafe {
-        LLVMAddFunction(
-            codegen.module,
-            b"putd\0".as_ptr() as _,
-            LLVMFunctionType(
-                LLVMVoidTypeInContext(codegen.ctx),
-                [LLVMInt32TypeInContext(codegen.ctx)].as_mut_ptr(),
-                1 as _,
-                false as _,
-            ),
-        );
-    }
-
-    for item in ast.0 {
-        codegen.gen_item(item)?;
-    }
-
-    unsafe {
-        let path = CString::new(format!("output/{module}.ll")).unwrap();
-        let mut err = std::ptr::null_mut();
-        if LLVMPrintModuleToFile(codegen.module, path.as_ptr(), &mut err) != 0 {
-            let err_obj = anyhow!(
-                "Couldn't output LLVM IR: {}",
-                CStr::from_ptr(err).to_str().unwrap()
-            );
-            LLVMDisposeMessage(err);
-            return Err(err_obj);
-        };
-
+    let target_machine = unsafe {
         LLVM_InitializeAllAsmPrinters();
 
         if LLVM_InitializeNativeTarget() != 0 {
@@ -93,7 +66,7 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
         }
 
         let triple = LLVMGetDefaultTargetTriple();
-        let mut target_ptr = std::ptr::null_mut();
+        let mut target_ptr: *mut llvm_sys::target_machine::LLVMTarget = std::ptr::null_mut();
         let mut err = std::ptr::null_mut();
         if LLVMGetTargetFromTriple(triple, &mut target_ptr, &mut err) != 0 {
             let err_obj = anyhow!(
@@ -114,6 +87,41 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
             LLVMCodeModel::LLVMCodeModelDefault,
         );
         LLVMDisposeMessage(triple);
+
+        // TODO figure out how to use this shit!!! how to call functions from external dll
+        if LLVMLoadLibraryPermanently("target/debug/libsundae_library.so\0".as_ptr() as _) != 0 {
+            bail!("Couldn't load standard library form LLVM");
+        }
+
+        LLVMAddFunction(
+            codegen.module,
+            b"putd\0".as_ptr() as _,
+            LLVMFunctionType(
+                LLVMVoidTypeInContext(codegen.ctx),
+                [LLVMInt32TypeInContext(codegen.ctx)].as_mut_ptr(),
+                1 as _,
+                false as _,
+            ),
+        );
+
+        target_machine
+    };
+
+    for item in ast.0 {
+        codegen.gen_item(item)?;
+    }
+
+    unsafe {
+        let path = CString::new(format!("output/{module}.ll")).unwrap();
+        let mut err = std::ptr::null_mut();
+        if LLVMPrintModuleToFile(codegen.module, path.as_ptr(), &mut err) != 0 {
+            let err_obj = anyhow!(
+                "Couldn't output LLVM IR: {}",
+                CStr::from_ptr(err).to_str().unwrap()
+            );
+            LLVMDisposeMessage(err);
+            return Err(err_obj);
+        };
 
         let path = CString::new(format!("output/{module}.o")).unwrap();
         let mut err = std::ptr::null_mut();
