@@ -1,8 +1,5 @@
 use crate::{
-    components::{
-        parser_types::{Name, TokenItTypeExt},
-        Expression,
-    },
+    components::{parser_types::Name, Expression},
     lexer::definitions::{Token, TokenType},
     parser::{Component, TokenIt, TokenItBaseExt},
 };
@@ -69,10 +66,16 @@ impl Statement {
 
         let mutable = tokens.consume(|t| t.value == "mut").is_some();
 
-        let r#type = if matches!(tokens.peek(), Some(Token { ref value, .. }) if value == ":=") {
-            None
+        // TODO use actual format to get type info
+        let r#type = if tokens.peek()?.value != ":=" {
+            Some(Type(
+                tokens
+                    .take_while(|t| t.value != "=")
+                    .map(|t| t.value)
+                    .collect(),
+            ))
         } else {
-            tokens.get_type()
+            None
         };
 
         let init = if tokens.consume(|t| t.value == ":=").is_some() {

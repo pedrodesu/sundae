@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use llvm_sys::{
     core::{
         LLVMDoubleTypeInContext, LLVMFP128TypeInContext, LLVMFloatTypeInContext,
@@ -8,72 +6,85 @@ use llvm_sys::{
         LLVMInt32TypeInContext, LLVMInt64TypeInContext, LLVMInt8TypeInContext,
         LLVMIntTypeInContext, LLVMPointerType, LLVMVoidTypeInContext,
     },
-    prelude::{LLVMContextRef, LLVMTypeRef, LLVMValueRef},
+    prelude::{LLVMContextRef, LLVMTypeRef},
 };
 
-use super::parser_types::{BaseType, Modifiers, ParserType};
+use super::parser_types::Type as ParserType;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Type {
     Integer { width: u32, signed: bool },
     Float(u32),
     Void,
-    Pointer(Box<Type>),
     Array { scalar: Box<Type>, size: usize },
+    Ref(Box<Type>),
+    MutRef(Box<Type>),
 }
 
-#[derive(Clone)]
-pub struct Value {
-    pub inner: LLVMValueRef,
-    pub r#type: Type,
-}
-
-pub struct Function {
-    pub inner: LLVMValueRef,
-    pub stack: HashMap<String, Value>,
+impl Default for Type {
+    #[inline]
+    fn default() -> Self {
+        Self::Void
+    }
 }
 
 impl TryFrom<ParserType> for Type {
     type Error = anyhow::Error;
 
     fn try_from(value: ParserType) -> Result<Self, Self::Error> {
-        let is_ptr = matches!(value.modifier, Some(Modifiers::Ref | Modifiers::MutRef));
-
-        let base = match value.base {
-            BaseType::Array { r#type, size } => {
+        todo!()
+        /*
+        match value.base {
+            ParserBaseType::Array { r#type, size } => {
                 let scalar = Box::new(Self::try_from(ParserType {
-                    base: BaseType::Scalar { r#type },
+                    base: ParserBaseType::Scalar { r#type },
                     modifier: None,
                 })?);
-                Ok(Self::Array { scalar, size })
+                Ok(Self {
+                    base: BaseType::Array { scalar, size },
+                    modifier: value.modifier,
+                })
             }
-            BaseType::Scalar { r#type } => {
+            ParserBaseType::Scalar { r#type } => {
                 let (signedness, bits) = r#type.split_at(1);
                 if matches!(signedness, "u" | "i") {
-                    Ok(Self::Integer {
-                        width: bits
-                            .parse()
-                            .map_err(|_| anyhow!("Integer with invalid width"))?,
-                        signed: signedness == "i",
+                    Ok(Self {
+                        base: BaseType::Integer {
+                            width: bits
+                                .parse()
+                                .map_err(|_| anyhow!("Integer with invalid width"))?,
+                            signed: signedness == "i",
+                        },
+                        modifier: value.modifier,
                     })
                 } else {
                     match r#type.as_str() {
-                        "f16" => Ok(Self::Float(16)),
-                        "f32" => Ok(Self::Float(32)),
-                        "f64" => Ok(Self::Float(64)),
-                        "f128" => Ok(Self::Float(128)),
-                        "void" => Ok(Self::Void),
+                        "f16" => Ok(Self {
+                            base: BaseType::Float(16),
+                            modifier: value.modifier,
+                        }),
+                        "f32" => Ok(Self {
+                            base: BaseType::Float(32),
+                            modifier: value.modifier,
+                        }),
+                        "f64" => Ok(Self {
+                            base: BaseType::Float(64),
+                            modifier: value.modifier,
+                        }),
+                        "f128" => Ok(Self {
+                            base: BaseType::Float(128),
+                            modifier: value.modifier,
+                        }),
+                        "void" => Ok(Self {
+                            base: BaseType::Void,
+                            modifier: value.modifier,
+                        }),
                         _ => Err(anyhow!("Unknown type")),
                     }
                 }
             }
-        }?;
-
-        if !is_ptr {
-            Ok(base)
-        } else {
-            Ok(Self::Pointer(Box::new(base)))
         }
+        */
     }
 }
 
@@ -81,24 +92,26 @@ impl Type {
     pub fn get_type(&self, ctx: LLVMContextRef) -> LLVMTypeRef {
         unsafe {
             match self {
-                Self::Integer { width, .. } => match *width {
+                Self::Integer { width, .. } => match width {
                     8 => LLVMInt8TypeInContext(ctx),
                     16 => LLVMInt16TypeInContext(ctx),
                     32 => LLVMInt32TypeInContext(ctx),
                     64 => LLVMInt64TypeInContext(ctx),
                     128 => LLVMInt128TypeInContext(ctx),
-                    n => LLVMIntTypeInContext(ctx, n),
+                    &n => LLVMIntTypeInContext(ctx, n),
                 },
-                Self::Float(width) => match *width {
+                Self::Float(width) => match width {
                     16 => LLVMHalfTypeInContext(ctx),
                     32 => LLVMFloatTypeInContext(ctx),
                     64 => LLVMDoubleTypeInContext(ctx),
                     128 => LLVMFP128TypeInContext(ctx),
                     _ => unreachable!(),
                 },
-                Self::Pointer(inner) => LLVMPointerType(inner.get_type(ctx), 0),
                 Self::Void => LLVMVoidTypeInContext(ctx),
                 Self::Array { .. } => todo!(),
+                Self::Ref(inner) | Self::MutRef(inner) => {
+                    LLVMPointerType(inner.get_type(ctx), Default::default())
+                }
             }
         }
     }

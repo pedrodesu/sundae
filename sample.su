@@ -1,29 +1,43 @@
-func swap(a &mut u32, b &mut u32) {
+func swap(a &mut i32, b &mut i32) {
     c u32 := a
-
-    // a is ptr, *a is i32, how to get original ptr back?
-    // comment is consuming newline, fix it
 }
 
-func op(a u32, b u32) u32 {
+/*
+
+mut &mut T
+    &mut T
+    &T
+    T
+
+
+mut and const are intrinsic to the "stack variable" (allow exceptionally in local and arg declarations)
+&mut T, &T and T are all different types. completely detaching themselves from any variable or special form
+
+mut can be mutated, immutable by default
+const implies value at compile time (aka zig's comptime)
+
+&T      dereferences to T
+&mut T  dereferences to mut T
+
+unallow anything such as references of references of references ("viral references")
+no dereferencing, whether a reference or the inner value is necessary is determined through context (a la C++)
+
+
+*/
+
+PI i32 = 3.71
+
+
+func op(a i32, b i32) u32 {
     ret a * b
 }
 
 func main() {
-    a mut u32 := op(10, 4)
-    b mut u32 := 32
+    a mut i32 := op(10, 4)
+    b mut i32 := 32
 
     swap(a, b)
     
     putd(a)
     putd(b)
-    // not swapping ?
 }
-
-/*
-stack of swap:
-
-a: Type::Ptr(Type::u32),
-b: Type::Ptr(Type::u32),
-c: Type::u32
-*/

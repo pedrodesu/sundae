@@ -3,18 +3,16 @@ use std::ffi::CString;
 use anyhow::{anyhow, bail, Result};
 use llvm_sys::{
     core::{
-        LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildBr, LLVMBuildCall2,
-        LLVMBuildCondBr, LLVMBuildLoad2, LLVMBuildStore, LLVMConstInt, LLVMConstStringInContext,
-        LLVMDoubleTypeInContext, LLVMGetFirstBasicBlock, LLVMGetNamedFunction, LLVMGetTypeKind,
-        LLVMGlobalGetValueType, LLVMInt32TypeInContext, LLVMInt8TypeInContext,
-        LLVMPositionBuilderAtEnd, LLVMTypeOf,
+        LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMConstInt,
+        LLVMConstStringInContext, LLVMDoubleTypeInContext, LLVMGetFirstBasicBlock, LLVMGetTypeKind,
+        LLVMInt32TypeInContext, LLVMInt8TypeInContext, LLVMPositionBuilderAtEnd, LLVMTypeOf,
     },
     LLVMTypeKind,
 };
 
 use crate::{
-    codegen::Codegen,
-    components::codegen_types::{Function, Type, Value},
+    codegen::{Codegen, Function, Value},
+    components::codegen_types::Type,
     lexer::definitions::LiteralType,
 };
 
@@ -97,46 +95,6 @@ impl Codegen {
                     r#type: Type::Float(64),
                 },
             }),
-            Expression::Reference(expr) => {
-                let expr = self.gen_non_void_expression(func, *expr)?;
-
-                unsafe {
-                    let alloc = LLVMBuildAlloca(
-                        self.builder,
-                        expr.r#type.get_type(self.ctx),
-                        "ref\0".as_ptr() as _,
-                    );
-                    LLVMBuildStore(self.builder, expr.inner, alloc);
-
-                    Some(Value {
-                        inner: alloc,
-                        r#type: Type::Pointer(Box::new(expr.r#type)),
-                    })
-                }
-            }
-            Expression::Dereference(expr) => {
-                let expr = self.gen_non_void_expression(func, *expr)?;
-
-                let pointee_type = if let Type::Pointer(inner) = expr.r#type {
-                    *inner
-                } else {
-                    bail!("Trying to dereference non-reference")
-                };
-
-                let value = unsafe {
-                    LLVMBuildLoad2(
-                        self.builder,
-                        pointee_type.get_type(self.ctx),
-                        expr.inner,
-                        "deref\0".as_ptr() as _,
-                    )
-                };
-
-                Some(Value {
-                    inner: value,
-                    r#type: pointee_type,
-                })
-            }
             Expression::Path(path) => {
                 let name = path.last().unwrap();
 
@@ -146,7 +104,18 @@ impl Codegen {
                     .ok_or_else(|| anyhow!("Identifier `{}` not found", name))?
                     .clone();
 
-                Some(Value {
+                Some(lookup)
+            }
+            Expression::Binary(n) => Some(self.gen_binary(func, n)?),
+            Expression::Call { path, args } => {
+                let name = path.last().unwrap();
+
+                let Some(function) = self.runtime.functions.get(name) else {
+                    bail!("Function `{}` not found", name);
+                };
+
+                /*
+                Value {
                     inner: unsafe {
                         let name = CString::new(name.as_str()).unwrap();
                         LLVMBuildLoad2(
@@ -157,31 +126,40 @@ impl Codegen {
                         )
                     },
                     r#type: lookup.r#type,
-                })
-            }
-            Expression::Binary(n) => Some(self.gen_binary(func, n)?),
-            Expression::Call { path, args } => {
-                let name = path.last().unwrap();
-
-                let function = unsafe {
-                    let name = CString::new(name.as_str()).unwrap();
-                    LLVMGetNamedFunction(self.module, name.as_ptr())
-                };
-
-                if function.is_null() {
-                    bail!("Function `{}` not found", name);
                 }
+                */
 
                 let ret = unsafe {
                     LLVMBuildCall2(
                         self.builder,
-                        LLVMGlobalGetValueType(function),
-                        function,
+                        function.return_type.get_type(self.ctx),
+                        function.inner,
                         args.clone()
                             .into_iter()
-                            .map(|e| {
-                                self.gen_non_void_expression(func, e)
-                                    .map(|v| v.inner.into())
+                            .enumerate()
+                            .map(|(i, e)| {
+                                let value = self.gen_non_void_expression(func, e)?;
+
+                                let Some(decl_type) = function.arguments.get(i) else {
+                                    // TODO move checking beforehand
+                                    bail!(
+                                        "Function `{}` expects {} arguments",
+                                        name,
+                                        function.arguments.len()
+                                    );
+                                };
+
+                                if value.r#type != decl_type.1 {
+                                    bail!(
+                                        "Function `{}` argument `{}` asks for a {:?}, got {:?}",
+                                        name,
+                                        decl_type.0,
+                                        decl_type.1,
+                                        value.r#type
+                                    );
+                                }
+
+                                Ok(value.inner)
                             })
                             .collect::<Result<Vec<_>>>()?
                             .as_mut_ptr(),
@@ -199,7 +177,13 @@ impl Codegen {
                 } {
                     Some(Value {
                         inner: ret,
-                        r#type: self.functions.get(name).unwrap().clone(),
+                        r#type: self
+                            .runtime
+                            .functions
+                            .get(name)
+                            .unwrap()
+                            .return_type
+                            .clone(),
                     })
                 } else {
                     None

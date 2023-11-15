@@ -10,28 +10,12 @@ impl Component for Expression {
         Self::parse_if,
         Self::parse_binary,
         Self::parse_literal,
-        Self::parse_reference,
-        Self::parse_dereference,
         Self::parse_call,
         Self::parse_path,
     ];
 }
 
 impl Expression {
-    #[inline]
-    fn parse_reference(tokens: TokenIt) -> Option<Self> {
-        tokens.consume(|t| t.value == "&")?;
-
-        Some(Self::Reference(Box::new(Expression::get(tokens)?)))
-    }
-
-    #[inline]
-    fn parse_dereference(tokens: TokenIt) -> Option<Self> {
-        tokens.consume(|t| t.value == "*")?;
-
-        Some(Self::Dereference(Box::new(Expression::get(tokens)?)))
-    }
-
     #[inline]
     fn parse_literal(tokens: TokenIt) -> Option<Self> {
         if let Token {

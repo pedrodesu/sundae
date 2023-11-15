@@ -13,8 +13,6 @@ pub enum Expression {
         r#type: LiteralType,
     },
     Path(Vec<String>),
-    Reference(Box<Expression>),
-    Dereference(Box<Expression>),
     Binary(binary::Node),
     Call {
         path: Vec<String>,

@@ -1,11 +1,11 @@
 use std::ffi::CString;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use llvm_sys::core::{LLVMBuildAlloca, LLVMBuildRet, LLVMBuildStore};
 
 use crate::{
-    codegen::Codegen,
-    components::codegen_types::{Function, Type, Value},
+    codegen::{Codegen, Function, Value},
+    components::codegen_types::Type,
 };
 
 use super::Statement;
@@ -31,10 +31,6 @@ impl Codegen {
                 source,
             } => {
                 let destination = self.gen_non_void_expression(func, destination)?;
-
-                if !matches!(destination.r#type, Type::Pointer(_)) {
-                    bail!("Trying to assign to a non-pointer value")
-                };
 
                 unsafe {
                     LLVMBuildStore(

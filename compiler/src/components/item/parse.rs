@@ -1,6 +1,8 @@
+use itertools::Itertools;
+
 use crate::{
     components::{
-        parser_types::{ArgumentName, Name, TokenItTypeExt},
+        parser_types::{ArgumentName, Name, Type},
         Expression,
     },
     lexer::definitions::TokenType,
@@ -21,9 +23,12 @@ impl Item {
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
         let r#type = if tokens.consume(|t| t.value == "=").is_none() {
-            let r#type = tokens.get_type();
-            tokens.consume(|t| t.value == "=")?;
-            r#type
+            Some(Type(
+                tokens
+                    .take_while(|t| t.value != "=")
+                    .map(|t| t.value)
+                    .collect(),
+            ))
         } else {
             None
         };
@@ -48,14 +53,29 @@ impl Item {
             ")",
             |t| {
                 let identifier = t.consume(|t| t.r#type == TokenType::Identifier)?;
-                let r#type = t.get_type()?;
+
+                let r#type = Type(
+                    tokens
+                        .peeking_take_while(|t| t.value != "," && t.value != ")")
+                        .map(|t| t.value)
+                        .collect(),
+                );
 
                 Some(ArgumentName(identifier, r#type))
             },
             Some(","),
         )?;
 
-        let r#type = tokens.get_type();
+        let r#type = if tokens.peek()?.value != "{" {
+            Some(Type(
+                tokens
+                    .peeking_take_while(|t| t.value != "{")
+                    .map(|t| t.value)
+                    .collect(),
+            ))
+        } else {
+            None
+        };
 
         let body = tokens.parse_block()?;
 

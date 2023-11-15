@@ -1,15 +1,13 @@
-use std::{collections::HashMap, ffi::CString};
+use std::ffi::CString;
 
 use crate::{
-    codegen::Codegen,
-    components::codegen_types::{Function, Type, Value},
+    codegen::{Codegen, Function},
+    components::codegen_types::Type,
 };
 
 use anyhow::Result;
 use llvm_sys::core::{
-    LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildRet,
-    LLVMBuildRetVoid, LLVMBuildStore, LLVMConstInt, LLVMFunctionType, LLVMGetParam,
-    LLVMPositionBuilderAtEnd,
+    LLVMAddFunction, LLVMBuildRet, LLVMBuildRetVoid, LLVMConstInt, LLVMFunctionType,
 };
 
 use super::Item;
@@ -42,7 +40,7 @@ impl Codegen {
             }
             Item::Function { signature, body } => {
                 // TODO should replace all "default" 32 with ptr type? make sure..
-                let ret_type = if signature.name.0 == "main" {
+                let return_type = if signature.name.0 == "main" {
                     Type::Integer {
                         width: 32,
                         signed: true,
@@ -52,26 +50,27 @@ impl Codegen {
                         .name
                         .1
                         .clone()
-                        .map(|v| Type::try_from(v))
+                        .map(Type::try_from)
                         .transpose()?
-                        .unwrap_or_else(|| Type::Void)
+                        .unwrap_or_default()
                 };
 
-                self.functions
-                    .insert(signature.name.0.clone(), ret_type.clone());
-
-                let mut params = signature
+                let arguments = signature
                     .arguments
                     .clone()
                     .into_iter()
-                    .map(|a| Ok(Type::try_from(a.1)?.get_type(self.ctx)))
+                    .map(|a| Ok((a.0, Type::try_from(a.1)?)))
                     .collect::<Result<Vec<_>>>()?;
 
-                let func = unsafe {
+                let inner = unsafe {
                     let func_type = LLVMFunctionType(
-                        ret_type.get_type(self.ctx),
-                        params.as_mut_ptr(),
-                        params.len() as _,
+                        return_type.get_type(self.ctx),
+                        arguments
+                            .iter()
+                            .map(|(_, t)| t.get_type(self.ctx))
+                            .collect::<Vec<_>>()
+                            .as_mut_ptr(),
+                        arguments.len() as _,
                         false as _,
                     );
 
@@ -80,58 +79,30 @@ impl Codegen {
                     LLVMAddFunction(self.module, name.as_ptr(), func_type)
                 };
 
-                let mut wrap = Function {
-                    inner: func,
-                    stack: HashMap::new(),
+                let mut function = Function {
+                    arguments,
+                    return_type,
+                    stack: Default::default(),
+                    inner,
                 };
 
-                unsafe {
-                    let block =
-                        LLVMAppendBasicBlockInContext(self.ctx, func, "entry\0".as_ptr() as _);
-                    LLVMPositionBuilderAtEnd(self.builder, block);
-                }
+                self.runtime
+                    .functions
+                    .insert(signature.name.0.clone(), function.clone());
 
-                signature
-                    .arguments
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, a)| {
-                        let arg = unsafe { LLVMGetParam(func, i as _) };
+                function.init_block(self);
 
-                        let r#type = Type::try_from(a.1)?;
-
-                        unsafe {
-                            let name = CString::new(a.0.clone()).unwrap();
-
-                            let alloc = LLVMBuildAlloca(
-                                self.builder,
-                                r#type.get_type(self.ctx),
-                                name.as_ptr(),
-                            );
-                            LLVMBuildStore(self.builder, arg, alloc);
-
-                            wrap.stack.insert(
-                                a.0,
-                                Value {
-                                    inner: alloc,
-                                    r#type,
-                                },
-                            );
-                        }
-
-                        Ok(())
-                    })
-                    .collect::<Result<_>>()?;
+                function.init_args_stack(self)?;
 
                 for statement in body {
-                    self.gen_statement(&mut wrap, statement)?;
+                    self.gen_statement(&mut function, statement)?;
                 }
 
                 if signature.name.0 == "main" {
                     unsafe {
                         LLVMBuildRet(
                             self.builder,
-                            LLVMConstInt(ret_type.get_type(self.ctx), 0, true as _),
+                            LLVMConstInt(function.return_type.get_type(self.ctx), 0, true as _),
                         );
                     }
                 } else if signature.name.1.is_none() {

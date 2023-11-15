@@ -34,6 +34,7 @@ impl Iterator for Lexer<'_> {
                             (acc.as_str(), r#type),
                             (next_acc.as_str(), next_type),
                         ) {
+                            // TODO re-do lexer ?
                             return Some(Ok(Token { value: acc, r#type }));
                         }
                     }
@@ -58,6 +59,6 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
     Lexer {
         iterator: input.chars().peekable(),
     }
-    .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment))
+    // .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment))
     .collect()
 }

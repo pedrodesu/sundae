@@ -8,8 +8,8 @@ use llvm_sys::{
 };
 
 use crate::{
-    codegen::Codegen,
-    components::codegen_types::{Function, Type, Value},
+    codegen::{Codegen, Function, Value},
+    components::codegen_types::Type,
 };
 
 use super::{Node, Operator};

@@ -1,5 +1,5 @@
 use super::{
-    parser_types::{ArgumentName, Name, ParserType},
+    parser_types::{ArgumentName, Name, Type as ParserType},
     Expression, Statement,
 };
 

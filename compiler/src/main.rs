@@ -31,9 +31,9 @@ fn main() -> Result<()> {
     );*/
 
     let ast = parser::parse(tokens);
-    // println!("{:#?}", ast);
+    println!("{:#?}", ast);
 
-    codegen::gen(module, ast)?;
+    // codegen::gen(module, ast)?;
 
     Ok(())
 }
