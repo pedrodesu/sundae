@@ -7,4 +7,3 @@ edition = "2021"
 anyhow = "1.0.75"
 itertools = "0.10.5"
 llvm-sys = { version = "170.0.0", features = ["prefer-static"] }
-tabled = "0.12.2"

@@ -25,13 +25,8 @@ fn main() -> Result<()> {
     };
 
     let tokens = lexer::tokenize(&(file + "\n")).context("Lexer failed")?;
-    /*println!(
-        "{}",
-        tabled::Table::new(tokens.clone()).with(tabled::settings::Style::sharp())
-    );*/
 
-    let ast = parser::parse(tokens);
-    println!("{:#?}", ast);
+    tokens.into_iter().for_each(|t| println!("{:?}", t));
 
     // codegen::gen(module, ast)?;
 

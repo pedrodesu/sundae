@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::Chars};
+use std::{iter::Peekable, mem, str::Chars};
 
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
@@ -24,22 +24,21 @@ impl Iterator for Lexer<'_> {
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
-            if let Ok(r#type) = TokenType::try_from(&*acc) {
+            if let Ok(t) = Token::try_from(&*acc) {
                 if let Some(&next) = self.iterator.peek() {
                     let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
-                    let next_type = TokenType::try_from(&*next_acc);
+                    let next_t = Token::try_from(&*next_acc);
 
-                    if !next_type.is_ok_and(|t| t == r#type) {
-                        if !allow_type_transmutation(
-                            (acc.as_str(), r#type),
-                            (next_acc.as_str(), next_type),
-                        ) {
+                    if !next_t
+                        .is_ok_and(|next_t| mem::discriminant(&t) == mem::discriminant(&next_t))
+                    {
+                        if !allow_type_transmutation(t, &next_acc) {
                             // TODO re-do lexer ?
-                            return Some(Ok(Token { value: acc, r#type }));
+                            return Some(Ok(t));
                         }
                     }
                 } else {
-                    return Some(Ok(Token { value: acc, r#type }));
+                    return Some(Ok(t));
                 }
             }
         }

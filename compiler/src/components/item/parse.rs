@@ -55,8 +55,7 @@ impl Item {
                 let identifier = t.consume(|t| t.r#type == TokenType::Identifier)?;
 
                 let r#type = Type(
-                    tokens
-                        .peeking_take_while(|t| t.value != "," && t.value != ")")
+                    t.peeking_take_while(|t| t.value != "," && t.value != ")")
                         .map(|t| t.value)
                         .collect(),
                 );

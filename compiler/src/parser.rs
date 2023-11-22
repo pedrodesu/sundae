@@ -31,7 +31,7 @@ pub trait TokenItBaseExt {
 impl TokenItBaseExt for TokenIt<'_> {
     #[inline]
     fn ignore_newlines(self) {
-        self.peeking_take_while(|t| t.r#type == TokenType::Newline)
+        self.peeking_take_while(|t| matches!(t, TokenType::Newline(_)))
             .for_each(drop)
     }
 

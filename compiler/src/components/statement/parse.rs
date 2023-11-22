@@ -1,6 +1,9 @@
 use crate::{
-    components::{parser_types::Name, Expression},
-    lexer::definitions::{Token, TokenType},
+    components::{
+        parser_types::{Name, Type},
+        Expression,
+    },
+    lexer::definitions::TokenType,
     parser::{Component, TokenIt, TokenItBaseExt},
 };
 

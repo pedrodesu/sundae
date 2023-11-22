@@ -25,7 +25,7 @@ no dereferencing, whether a reference or the inner value is necessary is determi
 
 */
 
-PI i32 = 3.71
+PI const i32 = 3.71
 
 
 func op(a i32, b i32) u32 {
