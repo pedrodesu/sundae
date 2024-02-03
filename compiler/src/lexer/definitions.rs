@@ -15,16 +15,15 @@ const RUNE_DELIM: char = '`';
 const COMMENT_PAIRS: &[(&str, &str)] = &[("//", "\n"), ("/*", "*/")];
 
 #[inline]
-pub(super) fn allow_type_transmutation(curr: Token, next: &str) -> bool {
-    matches!(
-        (curr, Token::try_from(next)),
-        (Token::Identifier(_), Ok(Token::Keyword(_)))
-            | (
-                Token::Literal(_, LiteralType::Int),
-                Ok(Token::Literal(_, LiteralType::Float))
-            )
-    ) || (COMMENT_PAIRS.into_iter().any(|&p| next == p.0))
-        || matches!(next, "0x" | "0X" | "0o")
+pub(super) fn allow_type_transmutation(
+    (_, curr_type): (&str, TokenType),
+    (next, next_type): (&str, Result<TokenType, ()>),
+) -> bool {
+    (curr_type == TokenType::Identifier && matches!(next_type, Ok(TokenType::Keyword)))
+        || (curr_type == TokenType::Literal(LiteralType::Int)
+            && matches!(next_type, Ok(TokenType::Literal(LiteralType::Float))))
+        || (COMMENT_PAIRS.into_iter().any(|&p| next == p.0))
+        || (matches!(next, "0x" | "0X" | "0o" | "0O" | "0b" | "0B"))
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -35,36 +34,44 @@ pub enum LiteralType {
     Float,
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub enum Token {
-    Keyword(String),
-    Identifier(String),
-    Operator(String),
-    Literal(String, LiteralType),
-    Separator(String),
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum TokenType {
+    Keyword,
+    Identifier,
+    Operator,
+    Literal(LiteralType),
+    Separator,
     Comment,
     Newline,
 }
 
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub value: String,
+    pub r#type: TokenType,
+}
+
 impl fmt::Display for Token {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let v = &self.value;
         write!(
             f,
             "{}",
-            match *self {
-                Self::Keyword(v) => Cow::from(format!("KEYW\t{v}")),
-                Self::Identifier(v) => Cow::from(format!("IDENT\t{v}")),
-                Self::Operator(v) => Cow::from(format!("OP\t{v}")),
-                Self::Literal(v, t) => Cow::from(format!("LIT\t{v}")),
-                Self::Separator(v) => Cow::from(format!("SEP\t{v}")),
-                Self::Comment => Cow::from("COMM"),
-                Self::Newline => Cow::from("NEWL"),
+            match self.r#type {
+                TokenType::Keyword => Cow::from(format!("KEYW\t{v}")),
+                TokenType::Identifier => Cow::from(format!("IDENT\t{v}")),
+                TokenType::Operator => Cow::from(format!("OP\t{v}")),
+                TokenType::Literal(_) => Cow::from(format!("LIT\t{v}")),
+                TokenType::Separator => Cow::from(format!("SEP\t{v}")),
+                TokenType::Comment => Cow::from("COMM"),
+                TokenType::Newline => Cow::from("NEWL"),
             }
         )
     }
 }
 
-impl Token {
+impl TokenType {
     #[inline]
     fn is_hex_int(expression: &str) -> bool {
         if !(expression.len() > 2) {
@@ -116,7 +123,7 @@ impl Token {
     }
 }
 
-impl TryFrom<&str> for Token {
+impl TryFrom<&str> for TokenType {
     type Error = ();
 
     #[inline]
@@ -125,36 +132,36 @@ impl TryFrom<&str> for Token {
             |delim: char| expr.starts_with(delim) && expr.ends_with(delim) && expr.len() > 1;
 
         if KEYWORDS.contains(&expr) {
-            Ok(Token::Keyword(expr.to_owned()))
+            Ok(TokenType::Keyword)
         } else if expr
             .chars()
             .all(|c| matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
             && expr.starts_with(|c| !matches!(c, '0'..='9'))
         {
-            Ok(Token::Identifier(expr.to_owned()))
+            Ok(TokenType::Identifier)
         } else if is_delim(RUNE_DELIM) {
-            Ok(Token::Literal(expr.to_owned(), LiteralType::Rune))
+            Ok(TokenType::Literal(LiteralType::Rune))
         } else if Self::is_hex_int(expr)
             || Self::is_dec_int(expr)
             || Self::is_oct_int(expr)
             || Self::is_bin_int(expr)
         {
-            Ok(Token::Literal(expr.to_owned(), LiteralType::Int))
+            Ok(TokenType::Literal(LiteralType::Int))
         } else if Self::is_float(expr) {
-            Ok(Token::Literal(expr.to_owned(), LiteralType::Float))
-        } else if is_delim(STR_DELIM) {
-            Ok(Token::Literal(expr.to_owned(), LiteralType::String))
+            Ok(TokenType::Literal(LiteralType::Float))
         } else if OPERATORS.contains(&expr) {
-            Ok(Token::Operator(expr.to_owned()))
+            Ok(TokenType::Operator)
         } else if SEPARATORS.contains(&expr) {
-            Ok(Token::Separator(expr.to_owned()))
+            Ok(TokenType::Separator)
+        } else if is_delim(STR_DELIM) {
+            Ok(TokenType::Literal(LiteralType::String))
         } else if COMMENT_PAIRS
             .into_iter()
             .any(|p| expr.starts_with(p.0) && expr.ends_with(p.1))
         {
-            Ok(Token::Comment)
+            Ok(TokenType::Comment)
         } else if expr == "\n" {
-            Ok(Token::Newline)
+            Ok(TokenType::Newline)
         } else {
             Err(())
         }

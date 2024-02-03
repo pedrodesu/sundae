@@ -24,21 +24,28 @@ impl Iterator for Lexer<'_> {
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
-            if let Ok(t) = Token::try_from(&*acc) {
+            if let Ok(t) = TokenType::try_from(&*acc) {
                 if let Some(&next) = self.iterator.peek() {
                     let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
-                    let next_t = Token::try_from(&*next_acc);
+                    let next_t = TokenType::try_from(&*next_acc);
 
                     if !next_t
                         .is_ok_and(|next_t| mem::discriminant(&t) == mem::discriminant(&next_t))
                     {
-                        if !allow_type_transmutation(t, &next_acc) {
+                        if !allow_type_transmutation((acc.as_str(), t), (next_acc.as_str(), next_t))
+                        {
                             // TODO re-do lexer ?
-                            return Some(Ok(t));
+                            return Some(Ok(Token {
+                                value: acc,
+                                r#type: t,
+                            }));
                         }
                     }
                 } else {
-                    return Some(Ok(t));
+                    return Some(Ok(Token {
+                        value: acc,
+                        r#type: t,
+                    }));
                 }
             }
         }
