@@ -23,7 +23,12 @@ fn main() -> Result<()> {
         name.rsplit_once('.').map(|(l, _)| l).unwrap_or(name)
     };
 
-    let tokens = lexer::tokenize(&file).context("Lexer failed")?;
+    let tokens = lexer::tokenize(&file)
+        .context("Lexer failed")?
+        // we ignore comments for now
+        .into_iter()
+        .filter(|t| t.r#type != crate::lexer::definitions::TokenType::Comment)
+        .collect::<Vec<_>>();
 
     tokens.iter().for_each(|t| println!("{:?}", t));
 

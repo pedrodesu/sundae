@@ -61,6 +61,5 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
     Lexer {
         iterator: input.chars().peekable(),
     }
-    .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment)) // we ignore comments for now
     .collect()
 }

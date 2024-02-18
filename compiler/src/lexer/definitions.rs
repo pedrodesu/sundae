@@ -1,5 +1,3 @@
-use std::{borrow::Cow, fmt};
-
 const KEYWORDS: &[&str] = &["const", "func", "ret", "mut"];
 
 const OPERATORS: &[&str] = &[
@@ -7,7 +5,7 @@ const OPERATORS: &[&str] = &[
     "!=", "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=", "|=", "^=", ":=",
 ];
 
-const SEPARATORS: &[&str] = &["(", ")", "[", "]", "{", "}", ",", ";", "."];
+const SEPARATORS: &[&str] = &["(", ")", "[", "]", "{", "}", ",", "."];
 
 const STR_DELIM: char = '"';
 const RUNE_DELIM: char = '`';
@@ -21,7 +19,7 @@ pub(super) fn allow_type_transmutation(
         || (curr_type == TokenType::Literal(LiteralType::Int)
             && matches!(next_type, Some(TokenType::Literal(LiteralType::Float))))
         || next == "//"
-        || matches!(next, "0x" | "0X" | "0o" | "0O" | "0b" | "0B")
+        || matches!(next, "0x" | "0o" | "0b")
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -49,26 +47,6 @@ pub struct Token {
     pub r#type: TokenType,
 }
 
-impl fmt::Display for Token {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let v = &self.value;
-        write!(
-            f,
-            "{}",
-            match self.r#type {
-                TokenType::Keyword => Cow::from(format!("KEYW\t{v}")),
-                TokenType::Identifier => Cow::from(format!("IDENT\t{v}")),
-                TokenType::Operator => Cow::from(format!("OP\t{v}")),
-                TokenType::Literal(_) => Cow::from(format!("LIT\t{v}")),
-                TokenType::Separator => Cow::from(format!("SEP\t{v}")),
-                TokenType::Comment => Cow::from("COMM"),
-                TokenType::Newline => Cow::from("NEWL"),
-            }
-        )
-    }
-}
-
 impl TokenType {
     #[inline]
     fn is_hex_int(expression: &str) -> bool {
@@ -76,7 +54,7 @@ impl TokenType {
             false
         } else {
             let (prefix, rem) = expression.split_at(2);
-            (prefix == "0x" || prefix == "0X")
+            prefix == "0x"
                 && rem
                     .chars()
                     .all(|c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'))
@@ -96,7 +74,7 @@ impl TokenType {
             false
         } else {
             let (prefix, rem) = expression.split_at(2);
-            (prefix == "0o" || prefix == "0O") && rem.chars().all(|c| matches!(c, '0'..='6'))
+            prefix == "0o" && rem.chars().all(|c| matches!(c, '0'..='7'))
         }
     }
 
@@ -106,7 +84,7 @@ impl TokenType {
             false
         } else {
             let (prefix, rem) = expression.split_at(2);
-            (prefix == "0b" || prefix == "0B") && rem.chars().all(|c| matches!(c, '0' | '1'))
+            prefix == "0b" && rem.chars().all(|c| matches!(c, '0' | '1'))
         }
     }
 
@@ -117,11 +95,17 @@ impl TokenType {
             .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
             && ((expression.matches('-').count() == 1 && expression.starts_with('-'))
                 || expression.matches('-').count() == 0)
-            && expression.matches('.').count() == 1
+            && (expression.matches('.').count() == 1 && !expression.starts_with('.'))
     }
-}
 
-impl TokenType {
+    #[inline]
+    fn is_identifier(expression: &str) -> bool {
+        expression
+            .chars()
+            .all(|c| matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
+            && expression.starts_with(|c| !matches!(c, '0'..='9'))
+    }
+
     #[inline]
     pub fn eval(expr: &str, is_end_of_comment: bool) -> Option<Self> {
         let is_delim =
@@ -129,11 +113,7 @@ impl TokenType {
 
         if KEYWORDS.contains(&expr) {
             Some(TokenType::Keyword)
-        } else if expr
-            .chars()
-            .all(|c| matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
-            && expr.starts_with(|c| !matches!(c, '0'..='9'))
-        {
+        } else if Self::is_identifier(expr) {
             Some(TokenType::Identifier)
         } else if is_delim(RUNE_DELIM) {
             Some(TokenType::Literal(LiteralType::Rune))
@@ -158,5 +138,79 @@ impl TokenType {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hexadecimal_is_correct() {
+        assert!(TokenType::is_hex_int("0x42069FFFff"));
+        assert!(TokenType::is_hex_int("0xffffffffffffffffffffffffffffffff"));
+
+        assert!(!TokenType::is_hex_int("0x"));
+        assert!(!TokenType::is_hex_int("0X42069FFFff"));
+        assert!(!TokenType::is_hex_int("12345"));
+        assert!(!TokenType::is_hex_int("0xFFFFFG"));
+    }
+
+    #[test]
+    fn octal_is_correct() {
+        assert!(TokenType::is_oct_int("0o01234567"));
+        assert!(TokenType::is_oct_int("0o777"));
+
+        assert!(!TokenType::is_oct_int("0o"));
+        assert!(!TokenType::is_oct_int("0O777"));
+        assert!(!TokenType::is_oct_int("12345"));
+        assert!(!TokenType::is_oct_int("0o7778"));
+    }
+
+    #[test]
+    fn binary_is_correct() {
+        assert!(TokenType::is_bin_int("0b000101010010101010101"));
+        assert!(TokenType::is_bin_int("0b1010"));
+
+        assert!(!TokenType::is_bin_int("0b"));
+        assert!(!TokenType::is_bin_int("0B1010"));
+        assert!(!TokenType::is_bin_int("12345"));
+        assert!(!TokenType::is_bin_int("0b10102"));
+    }
+
+    #[test]
+    fn decimal_is_correct() {
+        assert!(TokenType::is_dec_int("1234"));
+        assert!(TokenType::is_dec_int("01234"));
+        assert!(TokenType::is_dec_int("-42"));
+
+        assert!(!TokenType::is_dec_int("42.0"));
+        assert!(!TokenType::is_dec_int("42a"));
+    }
+
+    #[test]
+    fn float_is_correct() {
+        assert!(TokenType::is_float("12.34"));
+        assert!(TokenType::is_float("01234.00"));
+        assert!(TokenType::is_float("-42.060"));
+        assert!(TokenType::is_float("-64."));
+
+        assert!(!TokenType::is_float("42"));
+        assert!(!TokenType::is_float("42.0a"));
+        assert!(!TokenType::is_float("42a.0"));
+        assert!(!TokenType::is_float("42.4.2"));
+        assert!(!TokenType::is_float(".0"));
+    }
+
+    #[test]
+    fn identifier_is_correct() {
+        assert!(TokenType::is_identifier("abc"));
+        assert!(TokenType::is_identifier("abc_def"));
+        assert!(TokenType::is_identifier("_abc_"));
+        assert!(TokenType::is_identifier("abc23"));
+        assert!(TokenType::is_identifier("_"));
+
+        assert!(!TokenType::is_identifier("23abc"));
+        assert!(!TokenType::is_identifier("abc-23"));
     }
 }

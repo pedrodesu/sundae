@@ -22,7 +22,6 @@ func swap(a &mut i32, b &mut i32) {
 
 // PI const i32 = 3.71
 
-
 func op(a i32, b i32) u32 {
     ret a * b
 }
@@ -36,5 +35,3 @@ func main() {
     putd(a)
     putd(b)
 }
-
-// h
