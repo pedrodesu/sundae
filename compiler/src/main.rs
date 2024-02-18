@@ -23,9 +23,11 @@ fn main() -> Result<()> {
         name.rsplit_once('.').map(|(l, _)| l).unwrap_or(name)
     };
 
-    let tokens = lexer::tokenize(&(file + "\n")).context("Lexer failed")?;
+    let tokens = lexer::tokenize(&file).context("Lexer failed")?;
 
-    tokens.into_iter().for_each(|t| println!("{:?}", t));
+    tokens.iter().for_each(|t| println!("{:?}", t));
+
+    // let ast = parser::parse(tokens);
 
     // codegen::gen(module, ast)?;
 

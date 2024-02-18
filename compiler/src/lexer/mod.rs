@@ -24,29 +24,25 @@ impl Iterator for Lexer<'_> {
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
-            if let Ok(t) = TokenType::try_from(&*acc) {
+            if let Some(t) =
+                TokenType::eval(&*acc, matches!(self.iterator.peek(), None | Some('\n')))
+            {
                 if let Some(&next) = self.iterator.peek() {
                     let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
-                    let next_t = TokenType::try_from(&*next_acc);
+                    let next_t = TokenType::eval(&*next_acc, false); // end of comment doesn't matter on peek
 
-                    if !next_t
-                        .is_ok_and(|next_t| mem::discriminant(&t) == mem::discriminant(&next_t))
+                    if next_t
+                        .is_some_and(|next_t| mem::discriminant(&t) == mem::discriminant(&next_t))
+                        || allow_type_transmutation((acc.as_str(), t), (next_acc.as_str(), next_t))
                     {
-                        if !allow_type_transmutation((acc.as_str(), t), (next_acc.as_str(), next_t))
-                        {
-                            // TODO re-do lexer ?
-                            return Some(Ok(Token {
-                                value: acc,
-                                r#type: t,
-                            }));
-                        }
+                        continue;
                     }
-                } else {
-                    return Some(Ok(Token {
-                        value: acc,
-                        r#type: t,
-                    }));
                 }
+
+                return Some(Ok(Token {
+                    value: acc,
+                    r#type: t,
+                }));
             }
         }
 
@@ -65,6 +61,6 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
     Lexer {
         iterator: input.chars().peekable(),
     }
-    // .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment))
+    .filter(|t| !t.as_ref().is_ok_and(|v| v.r#type == TokenType::Comment)) // we ignore comments for now
     .collect()
 }

@@ -12,18 +12,16 @@ const SEPARATORS: &[&str] = &["(", ")", "[", "]", "{", "}", ",", ";", "."];
 const STR_DELIM: char = '"';
 const RUNE_DELIM: char = '`';
 
-const COMMENT_PAIRS: &[(&str, &str)] = &[("//", "\n"), ("/*", "*/")];
-
 #[inline]
 pub(super) fn allow_type_transmutation(
     (_, curr_type): (&str, TokenType),
-    (next, next_type): (&str, Result<TokenType, ()>),
+    (next, next_type): (&str, Option<TokenType>),
 ) -> bool {
-    (curr_type == TokenType::Identifier && matches!(next_type, Ok(TokenType::Keyword)))
+    (curr_type == TokenType::Identifier && matches!(next_type, Some(TokenType::Keyword)))
         || (curr_type == TokenType::Literal(LiteralType::Int)
-            && matches!(next_type, Ok(TokenType::Literal(LiteralType::Float))))
-        || (COMMENT_PAIRS.into_iter().any(|&p| next == p.0))
-        || (matches!(next, "0x" | "0X" | "0o" | "0O" | "0b" | "0B"))
+            && matches!(next_type, Some(TokenType::Literal(LiteralType::Float))))
+        || next == "//"
+        || matches!(next, "0x" | "0X" | "0o" | "0O" | "0b" | "0B")
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -123,47 +121,42 @@ impl TokenType {
     }
 }
 
-impl TryFrom<&str> for TokenType {
-    type Error = ();
-
+impl TokenType {
     #[inline]
-    fn try_from(expr: &str) -> Result<Self, Self::Error> {
+    pub fn eval(expr: &str, is_end_of_comment: bool) -> Option<Self> {
         let is_delim =
             |delim: char| expr.starts_with(delim) && expr.ends_with(delim) && expr.len() > 1;
 
         if KEYWORDS.contains(&expr) {
-            Ok(TokenType::Keyword)
+            Some(TokenType::Keyword)
         } else if expr
             .chars()
             .all(|c| matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
             && expr.starts_with(|c| !matches!(c, '0'..='9'))
         {
-            Ok(TokenType::Identifier)
+            Some(TokenType::Identifier)
         } else if is_delim(RUNE_DELIM) {
-            Ok(TokenType::Literal(LiteralType::Rune))
+            Some(TokenType::Literal(LiteralType::Rune))
         } else if Self::is_hex_int(expr)
             || Self::is_dec_int(expr)
             || Self::is_oct_int(expr)
             || Self::is_bin_int(expr)
         {
-            Ok(TokenType::Literal(LiteralType::Int))
+            Some(TokenType::Literal(LiteralType::Int))
         } else if Self::is_float(expr) {
-            Ok(TokenType::Literal(LiteralType::Float))
+            Some(TokenType::Literal(LiteralType::Float))
         } else if OPERATORS.contains(&expr) {
-            Ok(TokenType::Operator)
+            Some(TokenType::Operator)
         } else if SEPARATORS.contains(&expr) {
-            Ok(TokenType::Separator)
+            Some(TokenType::Separator)
         } else if is_delim(STR_DELIM) {
-            Ok(TokenType::Literal(LiteralType::String))
-        } else if COMMENT_PAIRS
-            .into_iter()
-            .any(|p| expr.starts_with(p.0) && expr.ends_with(p.1))
-        {
-            Ok(TokenType::Comment)
+            Some(TokenType::Literal(LiteralType::String))
+        } else if expr.starts_with("//") && is_end_of_comment {
+            Some(TokenType::Comment)
         } else if expr == "\n" {
-            Ok(TokenType::Newline)
+            Some(TokenType::Newline)
         } else {
-            Err(())
+            None
         }
     }
 }
