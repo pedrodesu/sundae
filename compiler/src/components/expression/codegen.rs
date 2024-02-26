@@ -114,21 +114,6 @@ impl Codegen {
                     bail!("Function `{}` not found", name);
                 };
 
-                /*
-                Value {
-                    inner: unsafe {
-                        let name = CString::new(name.as_str()).unwrap();
-                        LLVMBuildLoad2(
-                            self.builder,
-                            lookup.r#type.get_type(self.ctx),
-                            lookup.inner,
-                            name.as_ptr(),
-                        )
-                    },
-                    r#type: lookup.r#type,
-                }
-                */
-
                 let ret = unsafe {
                     LLVMBuildCall2(
                         self.builder,
@@ -141,7 +126,6 @@ impl Codegen {
                                 let value = self.gen_non_void_expression(func, e)?;
 
                                 let Some(decl_type) = function.arguments.get(i) else {
-                                    // TODO move checking beforehand
                                     bail!(
                                         "Function `{}` expects {} arguments",
                                         name,
@@ -167,8 +151,9 @@ impl Codegen {
                         "call\0".as_ptr() as _,
                     )
                 };
+                println!("2");
+                // segfault on buildcall2?????????
 
-                // TODO make this shit better, fucking lifetimes lol
                 if unsafe {
                     !matches!(
                         LLVMGetTypeKind(LLVMTypeOf(ret)),

@@ -20,7 +20,7 @@ func swap(a &mut i32, b &mut i32) {
 // unallow anything such as references of references of references ("viral references")
 // no dereferencing, whether a reference or the inner value is necessary is determined through context (a la C++)
 
-// PI const i32 = 3.71
+// const PI i32 = 3.71
 
 func op(a i32, b i32) u32 {
     ret a * b

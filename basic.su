@@ -1,16 +1,10 @@
-func op(a u32, b u32) u32 {
-    ret a * b
+func op(a i32, b i32) i32 {
 }
 
 func main() {
-    a mut u32 := op(10, 4) // 10 * 4 = 40
-    b mut u32 := 32
+    a mut i32 := op(10, 4) // 10 * 4 = 40
+    b mut i32 := 32
     // 32
 
-    c mut u32 := a
-
-    _ := 42
-    
-    putd(a)
-    putd(b)
+    c mut i32 := a
 }

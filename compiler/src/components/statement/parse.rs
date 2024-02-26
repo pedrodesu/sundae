@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::{
     components::{
         parser_types::{Name, Type},
@@ -73,7 +75,7 @@ impl Statement {
         let r#type = if tokens.peek()?.value != ":=" {
             Some(Type(
                 tokens
-                    .take_while(|t| t.value != "=")
+                    .peeking_take_while(|t| t.value != ":=")
                     .map(|t| t.value)
                     .collect(),
             ))

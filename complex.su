@@ -1,5 +1,5 @@
-// inferred to an array of runes ([11]rune)
-const MAGIC_STR = "Hello world"
+// array of runes ([11]rune)
+const MAGIC_STR [11]rune = "Hello world"
 // defaults to an i32
 const MAGIC_NUMBER = 42
 
@@ -11,9 +11,9 @@ func read_fd(fd i32) {
 // it is also const, so must be known at compile time (it's a generic, makes sense) (a type must be const, then)
 // a and b are mutable references to the original values
 func swap(T const type, a &mut T, b &mut T) {
-    c := *a
-    *a = *b
-    *b = c
+    c := a
+    a = b
+    b = c
 }
 
 func other() u32 {
@@ -36,7 +36,7 @@ func main() {
 
     a mut i32 := 46
     b mut := 32
-    swap(&mut a, &mut b)
+    swap(a, b)
 
     other()
 

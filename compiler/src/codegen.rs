@@ -26,7 +26,7 @@ use crate::{components::codegen_types::Type, parser::AST};
 
 use anyhow::{anyhow, bail, Result};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Value {
     pub r#type: Type,
     pub inner: LLVMValueRef,
@@ -37,7 +37,7 @@ pub struct Local {
     value: Value,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Function {
     pub arguments: Vec<(String, Type)>,
     pub return_type: Type,

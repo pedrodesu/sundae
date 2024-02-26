@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use llvm_sys::{
     core::{
         LLVMDoubleTypeInContext, LLVMFP128TypeInContext, LLVMFloatTypeInContext,
@@ -32,59 +32,26 @@ impl TryFrom<ParserType> for Type {
     type Error = anyhow::Error;
 
     fn try_from(value: ParserType) -> Result<Self, Self::Error> {
-        todo!()
-        /*
-        match value.base {
-            ParserBaseType::Array { r#type, size } => {
-                let scalar = Box::new(Self::try_from(ParserType {
-                    base: ParserBaseType::Scalar { r#type },
-                    modifier: None,
-                })?);
-                Ok(Self {
-                    base: BaseType::Array { scalar, size },
-                    modifier: value.modifier,
-                })
-            }
-            ParserBaseType::Scalar { r#type } => {
-                let (signedness, bits) = r#type.split_at(1);
-                if matches!(signedness, "u" | "i") {
-                    Ok(Self {
-                        base: BaseType::Integer {
-                            width: bits
-                                .parse()
-                                .map_err(|_| anyhow!("Integer with invalid width"))?,
-                            signed: signedness == "i",
-                        },
-                        modifier: value.modifier,
-                    })
-                } else {
-                    match r#type.as_str() {
-                        "f16" => Ok(Self {
-                            base: BaseType::Float(16),
-                            modifier: value.modifier,
-                        }),
-                        "f32" => Ok(Self {
-                            base: BaseType::Float(32),
-                            modifier: value.modifier,
-                        }),
-                        "f64" => Ok(Self {
-                            base: BaseType::Float(64),
-                            modifier: value.modifier,
-                        }),
-                        "f128" => Ok(Self {
-                            base: BaseType::Float(128),
-                            modifier: value.modifier,
-                        }),
-                        "void" => Ok(Self {
-                            base: BaseType::Void,
-                            modifier: value.modifier,
-                        }),
-                        _ => Err(anyhow!("Unknown type")),
-                    }
-                }
+        let r#type = &value.0[0]; // TODO assume for now
+
+        let (signedness, bits) = r#type.split_at(1);
+        if matches!(signedness, "u" | "i") {
+            Ok(Self::Integer {
+                width: bits
+                    .parse()
+                    .map_err(|_| anyhow!("Integer with invalid width"))?,
+                signed: signedness == "i",
+            })
+        } else {
+            match r#type.as_str() {
+                "f16" => Ok(Self::Float(16)),
+                "f32" => Ok(Self::Float(32)),
+                "f64" => Ok(Self::Float(64)),
+                "f128" => Ok(Self::Float(128)),
+                "void" => Ok(Self::Void),
+                _ => Err(anyhow!("Unknown type")),
             }
         }
-        */
     }
 }
 

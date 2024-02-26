@@ -30,11 +30,13 @@ fn main() -> Result<()> {
         .filter(|t| t.r#type != crate::lexer::definitions::TokenType::Comment)
         .collect::<Vec<_>>();
 
-    tokens.iter().for_each(|t| println!("{:?}", t));
+    // tokens.iter().for_each(|t| println!("{:?}", t));
 
-    // let ast = parser::parse(tokens);
+    let ast = parser::parse(tokens);
 
-    // codegen::gen(module, ast)?;
+    // println!("{ast:#?}");
+
+    codegen::gen(module, ast)?;
 
     Ok(())
 }
