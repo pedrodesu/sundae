@@ -50,7 +50,7 @@ pub struct Token {
 impl TokenType {
     #[inline]
     fn is_hex_int(expression: &str) -> bool {
-        if !(expression.len() > 2) {
+        if expression.len() <= 2 {
             false
         } else {
             let (prefix, rem) = expression.split_at(2);
@@ -70,7 +70,7 @@ impl TokenType {
 
     #[inline]
     fn is_oct_int(expression: &str) -> bool {
-        if !(expression.len() > 2) {
+        if expression.len() <= 2 {
             false
         } else {
             let (prefix, rem) = expression.split_at(2);
@@ -80,7 +80,7 @@ impl TokenType {
 
     #[inline]
     fn is_bin_int(expression: &str) -> bool {
-        if !(expression.len() > 2) {
+        if expression.len() <= 2 {
             false
         } else {
             let (prefix, rem) = expression.split_at(2);

@@ -1,23 +1,35 @@
+use compiler_lexer::definitions::TokenType;
 use itertools::Itertools;
 
 use crate::{
-    components::{
-        parser_types::{ArgumentName, Name, Type},
-        Expression,
-    },
-    lexer::definitions::TokenType,
-    parser::{Component, TokenIt, TokenItBaseExt},
+    expression::Expression, statement::Statement, ArgumentName, ExhaustiveGet, Name, TokenIt, Type,
 };
 
-use super::{Item, Signature};
+#[derive(Debug)]
+pub struct FunctionSignature {
+    pub name: (String, Option<Type>),
+    pub arguments: Vec<ArgumentName>,
+}
 
-impl Component for Item {
-    const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>] =
+#[derive(Debug)]
+pub enum Item {
+    Const {
+        name: Name,
+        value: Expression,
+    },
+    Function {
+        signature: FunctionSignature,
+        body: Vec<Statement>,
+    },
+}
+
+impl ExhaustiveGet for Item {
+    const PARSE_OPTIONS: &'static [fn(&mut TokenIt) -> Option<Self>] =
         &[Self::parse_const, Self::parse_function];
 }
 
 impl Item {
-    fn parse_const(tokens: TokenIt) -> Option<Self> {
+    pub fn parse_const(tokens: &mut TokenIt) -> Option<Self> {
         tokens.consume(|t| t.value == "const")?;
 
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
@@ -25,6 +37,8 @@ impl Item {
         let r#type = if tokens.consume(|t| t.value == "=").is_none() {
             Some(Type(
                 tokens
+                    .0
+                    .by_ref()
                     .take_while(|t| t.value != "=")
                     .map(|t| t.value)
                     .collect(),
@@ -43,7 +57,7 @@ impl Item {
         })
     }
 
-    fn parse_function(tokens: TokenIt) -> Option<Self> {
+    pub fn parse_function(tokens: &mut TokenIt) -> Option<Self> {
         tokens.consume(|t| t.value == "func")?;
 
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
@@ -55,7 +69,7 @@ impl Item {
                 let identifier = t.consume(|t| t.r#type == TokenType::Identifier)?;
 
                 let r#type = Type(
-                    t.peeking_take_while(|t| t.value != "," && t.value != ")")
+                    t.0.peeking_take_while(|t| t.value != "," && t.value != ")")
                         .map(|t| t.value)
                         .collect(),
                 );
@@ -65,9 +79,10 @@ impl Item {
             Some(","),
         )?;
 
-        let r#type = if tokens.peek()?.value != "{" {
+        let r#type = if tokens.0.peek()?.value != "{" {
             Some(Type(
                 tokens
+                    .0
                     .peeking_take_while(|t| t.value != "{")
                     .map(|t| t.value)
                     .collect(),
@@ -79,7 +94,7 @@ impl Item {
         let body = tokens.parse_block()?;
 
         Some(Self::Function {
-            signature: Signature {
+            signature: FunctionSignature {
                 name: (identifier, r#type),
                 arguments,
             },

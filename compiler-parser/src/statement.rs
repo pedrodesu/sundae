@@ -1,18 +1,25 @@
+use compiler_lexer::definitions::TokenType;
 use itertools::Itertools;
 
-use crate::{
-    components::{
-        parser_types::{Name, Type},
-        Expression,
+use crate::{expression::Expression, ExhaustiveGet, Name, TokenIt, Type};
+
+#[derive(Debug, Clone)]
+pub enum Statement {
+    Return(Option<Expression>),
+    Expression(Expression),
+    Assign {
+        destination: Expression,
+        source: Expression,
     },
-    lexer::definitions::TokenType,
-    parser::{Component, TokenIt, TokenItBaseExt},
-};
+    Local {
+        mutable: bool,
+        name: Name,
+        init: Option<Expression>,
+    },
+}
 
-use super::Statement;
-
-impl Component for Statement {
-    const PARSE_OPTIONS: &'static [fn(TokenIt) -> Option<Self>] = &[
+impl ExhaustiveGet for Statement {
+    const PARSE_OPTIONS: &'static [fn(&mut TokenIt) -> Option<Self>] = &[
         Self::parse_return,
         Self::parse_expression,
         Self::parse_assign,
@@ -22,16 +29,16 @@ impl Component for Statement {
 
 impl Statement {
     #[inline]
-    fn common(tokens: TokenIt) -> Option<()> {
+    fn common(tokens: &mut TokenIt) -> Option<()> {
         tokens.consume(|t| t.r#type == TokenType::Newline)?;
 
         Some(())
     }
 
-    fn parse_return(tokens: TokenIt) -> Option<Self> {
+    pub fn parse_return(tokens: &mut TokenIt) -> Option<Self> {
         tokens.consume(|t| t.value == "ret")?;
 
-        let expr = if tokens.peek()?.r#type != TokenType::Newline {
+        let expr = if tokens.0.peek()?.r#type != TokenType::Newline {
             Some(Expression::get(tokens)?)
         } else {
             None
@@ -43,7 +50,7 @@ impl Statement {
     }
 
     #[inline]
-    fn parse_expression(tokens: TokenIt) -> Option<Self> {
+    pub fn parse_expression(tokens: &mut TokenIt) -> Option<Self> {
         let expr = Expression::get(tokens)?;
 
         Self::common(tokens)?;
@@ -51,7 +58,7 @@ impl Statement {
         Some(Self::Expression(expr))
     }
 
-    fn parse_assign(tokens: TokenIt) -> Option<Self> {
+    pub fn parse_assign(tokens: &mut TokenIt) -> Option<Self> {
         let destination = Expression::get(tokens)?;
 
         tokens.consume(|t| t.value == "=")?;
@@ -66,15 +73,16 @@ impl Statement {
         })
     }
 
-    fn parse_local(tokens: TokenIt) -> Option<Self> {
+    pub fn parse_local(tokens: &mut TokenIt) -> Option<Self> {
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
         let mutable = tokens.consume(|t| t.value == "mut").is_some();
 
         // TODO use actual format to get type info
-        let r#type = if tokens.peek()?.value != ":=" {
+        let r#type = if tokens.0.peek()?.value != ":=" {
             Some(Type(
                 tokens
+                    .0
                     .peeking_take_while(|t| t.value != ":=")
                     .map(|t| t.value)
                     .collect(),

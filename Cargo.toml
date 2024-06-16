@@ -1,3 +1,8 @@
 [workspace]
-members = ["compiler", "library"]
-resolver = "2"
+members = [
+    "compiler-codegen-llvm",
+    "compiler-driver",
+    "compiler-lexer",
+    "compiler-parser",
+    "library",
+]

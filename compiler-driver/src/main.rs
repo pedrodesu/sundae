@@ -1,13 +1,6 @@
-#![feature(trait_upcasting)]
-
 use std::{env, fs, path::Path};
 
 use anyhow::{Context, Result};
-
-mod codegen;
-mod components;
-mod lexer;
-mod parser;
 
 fn main() -> Result<()> {
     let path = env::args().nth(1).expect("no path");
@@ -23,23 +16,21 @@ fn main() -> Result<()> {
         name.rsplit_once('.').map(|(l, _)| l).unwrap_or(name)
     };
 
-    let tokens = lexer::tokenize(&file)
+    let tokens = compiler_lexer::tokenize(&file)
         .context("Lexer failed")?
-        // we ignore comments for now
         .into_iter()
-        .filter(|t| t.r#type != crate::lexer::definitions::TokenType::Comment)
+        .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment)
         .collect::<Vec<_>>();
 
     // tokens.iter().for_each(|t| println!("{:?}", t));
 
-    let ast = parser::parse(tokens);
+    let ast = compiler_parser::parse(tokens);
 
     // println!("{ast:#?}");
 
-    codegen::gen(module, ast)?;
+    compiler_codegen_llvm::gen(module, ast)?;
 
     Ok(())
 }
 
-// TODO clean internal organisation
 // adhere to syntax on sample.su

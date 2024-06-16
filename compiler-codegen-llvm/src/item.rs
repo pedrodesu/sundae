@@ -1,21 +1,18 @@
-use std::ffi::CString;
+use std::{cell::RefCell, rc::Rc};
 
-use crate::{
-    codegen::{Codegen, Function},
-    components::codegen_types::Type,
+use anyhow::{bail, Result};
+use inkwell::{
+    types::{AnyTypeEnum, BasicType},
+    values::BasicValue,
 };
 
-use anyhow::Result;
-use llvm_sys::core::{
-    LLVMAddFunction, LLVMBuildRet, LLVMBuildRetVoid, LLVMConstInt, LLVMFunctionType,
-};
+use crate::{Codegen, Function, Type};
+use compiler_parser::Item;
 
-use super::Item;
-
-impl Codegen {
-    pub fn gen_item(&mut self, item: Item) -> Result<()> {
+impl<'ctx> Codegen<'ctx> {
+    pub fn gen_item(&self, item: Item) -> Result<()> {
         match item {
-            Item::Const { name, value } => {
+            Item::Const { .. } => {
                 /*
                 let r#type = self.basic_type(&name.1).unwrap();
                 let r#const = codegen
@@ -62,54 +59,51 @@ impl Codegen {
                     .map(|a| Ok((a.0, Type::try_from(a.1)?)))
                     .collect::<Result<Vec<_>>>()?;
 
-                let inner = unsafe {
-                    let func_type = LLVMFunctionType(
-                        return_type.get_type(self.ctx),
+                let inner = self.module.add_function(
+                    signature.name.0.as_str(),
+                    return_type.as_llvm_basic_type(self.ctx)?.fn_type(
                         arguments
                             .iter()
-                            .map(|(_, t)| t.get_type(self.ctx))
-                            .collect::<Vec<_>>()
-                            .as_mut_ptr(),
-                        arguments.len() as _,
-                        false as _,
-                    );
+                            .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
+                            .collect::<Result<Vec<_>>>()?
+                            .as_slice(),
+                        false,
+                    ),
+                    None,
+                );
 
-                    let name = CString::new(signature.name.0.clone()).unwrap();
-
-                    LLVMAddFunction(self.module, name.as_ptr(), func_type)
-                };
-
-                let mut function = Function {
+                let function = Rc::new(RefCell::new(Function {
                     arguments,
-                    return_type,
+                    return_type: return_type.clone(),
                     stack: Default::default(),
                     inner,
-                };
+                }));
 
-                self.runtime
-                    .functions
-                    .insert(signature.name.0.clone(), function.clone());
+                function.borrow_mut().init_block(self);
 
-                function.init_block(self);
-
-                function.init_args_stack(self)?;
+                function.borrow_mut().init_args_stack(self)?;
 
                 for statement in body {
-                    self.gen_statement(&mut function, statement)?;
+                    self.gen_statement(Rc::clone(&function), statement.clone())?;
                 }
 
                 if signature.name.0 == "main" {
-                    unsafe {
-                        LLVMBuildRet(
-                            self.builder,
-                            LLVMConstInt(function.return_type.get_type(self.ctx), 0, true as _),
-                        );
-                    }
+                    let ret =
+                        if let AnyTypeEnum::IntType(v) = return_type.as_llvm_any_type(self.ctx) {
+                            Some(Box::new(v.const_zero()) as Box<dyn BasicValue>)
+                        } else {
+                            bail!("type {return_type:?} can't be converted to a integer type")
+                        };
+
+                    self.builder.build_return(ret.as_deref())?;
                 } else if signature.name.1.is_none() {
-                    unsafe {
-                        LLVMBuildRetVoid(self.builder);
-                    }
+                    self.builder.build_return(None)?;
                 }
+
+                self.runtime
+                    .borrow_mut()
+                    .functions
+                    .insert(signature.name.0.clone(), function);
 
                 Ok(())
             }

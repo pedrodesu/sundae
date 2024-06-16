@@ -1,0 +1,13 @@
+func op() i32 {
+    ret 42
+}
+
+func main() {
+    a mut i32 := 40 // 10 * 4 = 40
+    b mut i32 := 32
+    // 32
+
+    op()
+
+    c mut i32 := a
+}

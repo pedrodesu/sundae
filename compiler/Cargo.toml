@@ -1,9 +1,0 @@
-[package]
-name = "sundae-compiler"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-anyhow = "1.0.79"
-itertools = "0.12.1"
-llvm-sys = { version = "170.0.0", features = ["prefer-static"] }

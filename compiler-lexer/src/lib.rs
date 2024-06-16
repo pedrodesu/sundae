@@ -24,12 +24,13 @@ impl Iterator for Lexer<'_> {
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
-            if let Some(t) =
-                TokenType::eval(&*acc, matches!(self.iterator.peek(), None | Some('\n')))
-            {
+            if let Some(t) = TokenType::eval(
+                acc.as_str(),
+                matches!(self.iterator.peek(), None | Some('\n')),
+            ) {
                 if let Some(&next) = self.iterator.peek() {
                     let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
-                    let next_t = TokenType::eval(&*next_acc, false); // end of comment doesn't matter on peek
+                    let next_t = TokenType::eval(next_acc.as_str(), false); // end of comment doesn't matter on peek
 
                     if next_t
                         .is_some_and(|next_t| mem::discriminant(&t) == mem::discriminant(&next_t))
@@ -47,12 +48,12 @@ impl Iterator for Lexer<'_> {
         }
 
         if !acc.is_empty() {
-            return Some(Err(anyhow!(
+            Some(Err(anyhow!(
                 "Incomplete expression ({acc:?} is an invalid expression)"
-            )));
+            )))
+        } else {
+            None
         }
-
-        None
     }
 }
 
