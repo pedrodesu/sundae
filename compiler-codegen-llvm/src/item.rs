@@ -59,18 +59,34 @@ impl<'ctx> Codegen<'ctx> {
                     .map(|a| Ok((a.0, Type::try_from(a.1)?)))
                     .collect::<Result<Vec<_>>>()?;
 
-                let inner = self.module.add_function(
-                    signature.name.0.as_str(),
-                    return_type.as_llvm_basic_type(self.ctx)?.fn_type(
-                        arguments
-                            .iter()
-                            .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
-                            .collect::<Result<Vec<_>>>()?
-                            .as_slice(),
-                        false,
-                    ),
-                    None,
-                );
+                let inner = {
+                    // TODO should be better
+                    let fn_type = if let Type::Void = return_type {
+                        return_type
+                            .as_llvm_any_type(self.ctx)
+                            .into_void_type()
+                            .fn_type(
+                                arguments
+                                    .iter()
+                                    .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
+                                    .collect::<Result<Vec<_>>>()?
+                                    .as_slice(),
+                                false,
+                            )
+                    } else {
+                        return_type.as_llvm_basic_type(self.ctx)?.fn_type(
+                            arguments
+                                .iter()
+                                .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
+                                .collect::<Result<Vec<_>>>()?
+                                .as_slice(),
+                            false,
+                        )
+                    };
+
+                    self.module
+                        .add_function(signature.name.0.as_str(), fn_type, None)
+                };
 
                 let function = Rc::new(RefCell::new(Function {
                     arguments,

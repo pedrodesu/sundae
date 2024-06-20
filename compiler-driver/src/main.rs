@@ -26,7 +26,7 @@ fn main() -> Result<()> {
 
     let ast = compiler_parser::parse(tokens);
 
-    // println!("{ast:#?}");
+    println!("{ast:#?}");
 
     compiler_codegen_llvm::gen(module, ast)?;
 

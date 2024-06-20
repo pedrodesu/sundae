@@ -1,5 +1,7 @@
 func swap(a &mut i32, b &mut i32) {
     c u32 := a
+    a = b
+    b = c
 }
 
 // mut &mut T
@@ -28,10 +30,8 @@ func op(a i32, b i32) u32 {
 
 func main() {
     a mut i32 := op(10, 4)
-    b mut i32 := 32
 
-    swap(a, b)
+    swap(a, 32)
     
     putd(a)
-    putd(b)
 }

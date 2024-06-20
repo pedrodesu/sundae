@@ -26,52 +26,48 @@ pub enum Operator {
 }
 
 impl Operator {
-    const TERMS: &'static [Operator] = {
+    const TERMS: &'static [Self] = {
+        use Operator::*;
+
         &[
-            Self::Sum,
-            Self::Sub,
-            Self::And,
-            Self::Or,
-            Self::Lt,
-            Self::Gt,
-            Self::Le,
-            Self::Ge,
-            Self::EqEq,
-            Self::Neq,
-            Self::Shl,
-            Self::Shr,
-            Self::ShAnd,
-            Self::ShOr,
-            Self::Xor,
+            Sum, Sub, And, Or, Lt, Gt, Le, Ge, EqEq, Neq, Shl, Shr, ShAnd, ShOr, Xor,
         ]
     };
 
-    const FACTORS: &'static [Operator] = { &[Self::Star, Self::Div] };
+    const FACTORS: &'static [Self] = {
+        use Operator::*;
+
+        &[Star, Div]
+    };
 }
 
-#[inline]
-fn from_string(token: &Token) -> Option<Operator> {
-    use Operator::*;
+impl TryFrom<&Token> for Operator {
+    type Error = ();
 
-    match token.value.as_str() {
-        "+" => Some(Sum),
-        "-" => Some(Sub),
-        "*" => Some(Star),
-        "/" => Some(Div),
-        "and" => Some(And),
-        "or" => Some(Or),
-        "<" => Some(Lt),
-        ">" => Some(Gt),
-        "<=" => Some(Le),
-        ">=" => Some(Ge),
-        "==" => Some(EqEq),
-        "!=" => Some(Neq),
-        "<<" => Some(Shl),
-        ">>" => Some(Shr),
-        "&" => Some(ShAnd),
-        "|" => Some(ShOr),
-        "^" => Some(Xor),
-        _ => None,
+    #[inline]
+    fn try_from(token: &Token) -> Result<Self, Self::Error> {
+        use Operator::*;
+
+        match token.value.as_str() {
+            "+" => Ok(Sum),
+            "-" => Ok(Sub),
+            "*" => Ok(Star),
+            "/" => Ok(Div),
+            "and" => Ok(And),
+            "or" => Ok(Or),
+            "<" => Ok(Lt),
+            ">" => Ok(Gt),
+            "<=" => Ok(Le),
+            ">=" => Ok(Ge),
+            "==" => Ok(EqEq),
+            "!=" => Ok(Neq),
+            "<<" => Ok(Shl),
+            ">>" => Ok(Shr),
+            "&" => Ok(ShAnd),
+            "|" => Ok(ShOr),
+            "^" => Ok(Xor),
+            _ => Err(()),
+        }
     }
 }
 
@@ -107,24 +103,26 @@ impl BinaryNode {
 
     fn factor(tokens: &mut TokenIt) -> Option<Self> {
         let mut acc = Self::term(tokens)?;
-        while let Some(t) = tokens
-            .0
-            .next_if(|t| from_string(t).is_some_and(|op| Operator::FACTORS.contains(&op)))
-        {
+        while let Some(t) = tokens.0.next_if(|t| {
+            Operator::try_from(t)
+                .ok()
+                .is_some_and(|op| Operator::FACTORS.contains(&op))
+        }) {
             let next = Self::term(tokens)?;
-            acc = Self::Compound(Box::new(acc), from_string(&t)?, Box::new(next));
+            acc = Self::Compound(Box::new(acc), Operator::try_from(&t).ok()?, Box::new(next));
         }
         Some(acc)
     }
 
     fn consume(tokens: &mut TokenIt) -> Option<Self> {
         let mut acc = Self::factor(tokens)?;
-        while let Some(t) = tokens
-            .0
-            .next_if(|t| from_string(t).is_some_and(|op| Operator::TERMS.contains(&op)))
-        {
+        while let Some(t) = tokens.0.next_if(|t| {
+            Operator::try_from(t)
+                .ok()
+                .is_some_and(|op| Operator::TERMS.contains(&op))
+        }) {
             let next = Self::factor(tokens)?;
-            acc = Self::Compound(Box::new(acc), from_string(&t)?, Box::new(next));
+            acc = Self::Compound(Box::new(acc), Operator::try_from(&t).ok()?, Box::new(next));
         }
         if let Self::Compound(..) = acc {
             Some(acc)

@@ -101,7 +101,7 @@ pub fn parse(input: Vec<Token>) -> AST {
             .consume(|t| t.r#type == TokenType::Newline)
             .is_none()
         {
-            items.push(dbg!(Item::get(&mut iterator)).unwrap());
+            items.push(Item::get(&mut iterator).unwrap());
         }
     }
 

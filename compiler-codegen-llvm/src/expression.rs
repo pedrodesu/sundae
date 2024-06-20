@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use compiler_lexer::definitions::LiteralType;
 use compiler_parser::Expression;
 
@@ -101,17 +101,64 @@ impl<'ctx> Codegen<'ctx> {
                                 );
                             };
 
-                            if value.r#type != decl_type.1 {
-                                bail!(
-                                    "Function `{}` argument `{}` asks for a {:?}, got {:?}",
-                                    name,
-                                    decl_type.0,
-                                    decl_type.1,
-                                    value.r#type
-                                );
-                            }
+                            // TODO turn this into a function and integrate into locals and maybe assignments, normalize ref type coersion
+                            // TODO can prolly be bettered
+                            match [&value.r#type, &decl_type.1] {
+                                [Type::MutRef(box arg_base_type), Type::MutRef(box decl_base_type)]
+                                | [Type::Ref(box arg_base_type), Type::Ref(box decl_base_type)]
+                                | [arg_base_type, decl_base_type]
+                                    if arg_base_type == decl_base_type =>
+                                {
+                                    ensure!(
+                                        *arg_base_type == *decl_base_type,
+                                        "Function `{}` argument `{}` asks for a {}, got {}",
+                                        name,
+                                        decl_type.0,
+                                        arg_base_type,
+                                        decl_base_type
+                                    );
 
-                            Ok(value.inner.into())
+                                    Ok(value.inner.into())
+                                }
+                                [arg_base_type, Type::MutRef(box decl_base_type)] => {
+                                    ensure!(
+                                        *arg_base_type == *decl_base_type,
+                                        "Function `{}` argument `{}` asks for a {}, got {}",
+                                        name,
+                                        decl_type.0,
+                                        arg_base_type,
+                                        decl_base_type
+                                    );
+
+                                    let ptr = self.builder.build_alloca(
+                                        arg_base_type.as_llvm_basic_type(&self.ctx)?,
+                                        "cast",
+                                    )?;
+
+                                    self.builder.build_store(ptr, value.inner)?;
+
+                                    Ok(ptr.into())
+                                }
+                                [Type::MutRef(box arg_base_type), decl_base_type] => {
+                                    ensure!(
+                                        *arg_base_type == *decl_base_type,
+                                        "Function `{}` argument `{}` asks for a {}, got {}",
+                                        name,
+                                        decl_type.0,
+                                        arg_base_type,
+                                        decl_base_type
+                                    );
+
+                                    let cast = self.builder.build_load(
+                                        decl_base_type.as_llvm_basic_type(&self.ctx)?,
+                                        value.inner.into_pointer_value(),
+                                        "cast",
+                                    )?;
+
+                                    Ok(cast.into())
+                                }
+                                _ => todo!(),
+                            }
                         })
                         .collect::<Result<Vec<_>>>()?
                         .as_slice(),

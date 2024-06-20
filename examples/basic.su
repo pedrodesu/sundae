@@ -1,13 +1,12 @@
-func op() i32 {
-    ret 42
+func add(a i32, b i32) i32 {
+    ret a + b
 }
 
 func main() {
     a mut i32 := 40 // 10 * 4 = 40
     b mut i32 := 32
-    // 32
 
-    op()
+    // c mut i32 := a // this blows up because of misconversion
 
-    c mut i32 := a
+    putd(add(a, b))
 }

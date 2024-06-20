@@ -2,6 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 use compiler_parser::Statement;
+use inkwell::values::BasicValue;
 
 use crate::{Codegen, Function, Type, Value};
 
@@ -17,8 +18,10 @@ impl<'ctx> Codegen<'ctx> {
                     .and_then(|e| self.gen_expression(func, e).transpose())
                     .transpose()?;
 
-                self.builder
-                    .build_return(ret.map(|v| Box::new(v.inner) as Box<_>).as_deref())?;
+                self.builder.build_return(
+                    ret.map(|v| Box::new(v.inner) as Box<dyn BasicValue>)
+                        .as_deref(),
+                )?;
 
                 Ok(())
             }
@@ -52,7 +55,7 @@ impl<'ctx> Codegen<'ctx> {
                     name.0,
                     Value {
                         inner: alloc.into(),
-                        r#type,
+                        r#type: Type::MutRef(Box::new(r#type)),
                     },
                 );
 

@@ -1,4 +1,7 @@
-use anyhow::{anyhow, bail, Context as _, Result};
+#![feature(box_patterns)]
+#![feature(let_chains)]
+
+use anyhow::{anyhow, bail, Result};
 use compiler_parser::{Type as ParserType, AST};
 use inkwell::{
     builder::Builder,
@@ -9,7 +12,7 @@ use inkwell::{
     values::{BasicValueEnum, FunctionValue},
     OptimizationLevel,
 };
-use std::{cell::RefCell, collections::HashMap, path::Path, process::Command, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, path::Path, process::Command, rc::Rc};
 
 mod expression;
 mod item;
@@ -33,28 +36,54 @@ impl Default for Type {
     }
 }
 
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Integer { width, signed } => {
+                write!(f, "{}{width}", if *signed { "i" } else { "u" })
+            }
+            Type::Float(width) => write!(f, "f{width}"),
+            Type::Void => write!(f, "()"),
+            Type::Array { box scalar, size } => write!(f, "[{size}]{scalar}"),
+            Type::Ref(box v) => write!(f, "&{v}"),
+            Type::MutRef(box v) => write!(f, "&mut {v}"),
+        }
+    }
+}
+
 impl TryFrom<ParserType> for Type {
     type Error = anyhow::Error;
 
     fn try_from(value: ParserType) -> Result<Self, Self::Error> {
-        let r#type = &value.0[0]; // TODO assume for now
-
-        let (signedness, bits) = r#type.split_at(1);
-        if matches!(signedness, "u" | "i") {
-            Ok(Self::Integer {
-                width: bits
-                    .parse()
-                    .map_err(|_| anyhow!("Integer with invalid width"))?,
-                signed: signedness == "i",
-            })
+        // TODO better this
+        if let [a, b, c @ ..] = value.0.as_slice()
+            && let ["&", "mut"] = [a.as_str(), b.as_str()]
+        {
+            return Ok(Self::MutRef(Box::new(ParserType(c.to_vec()).try_into()?)));
+        } else if let [a, b @ ..] = value.0.as_slice()
+            && let ["&"] = [a.as_str()]
+        {
+            return Ok(Self::Ref(Box::new(ParserType(b.to_vec()).try_into()?)));
         } else {
-            match r#type.as_str() {
-                "f16" => Ok(Self::Float(16)),
-                "f32" => Ok(Self::Float(32)),
-                "f64" => Ok(Self::Float(64)),
-                "f128" => Ok(Self::Float(128)),
-                "void" => Ok(Self::Void),
-                _ => Err(anyhow!("Unknown type")),
+            let r#type = &value.0[0]; // TODO assume for now
+
+            let (signedness, bits) = r#type.split_at(1);
+            if matches!(signedness, "u" | "i") {
+                Ok(Self::Integer {
+                    width: bits
+                        .parse()
+                        .map_err(|_| anyhow!("Integer with invalid width"))?,
+                    signed: signedness == "i",
+                })
+            } else {
+                match r#type.as_str() {
+                    "f16" => Ok(Self::Float(16)),
+                    "f32" => Ok(Self::Float(32)),
+                    "f64" => Ok(Self::Float(64)),
+                    "f128" => Ok(Self::Float(128)),
+                    "void" => Ok(Self::Void),
+                    _ => Err(anyhow!("Unknown type")),
+                }
             }
         }
     }
@@ -63,9 +92,9 @@ impl TryFrom<ParserType> for Type {
 impl Type {
     #[inline]
     pub fn as_llvm_any_type<'ctx>(&self, ctx: &'ctx Context) -> AnyTypeEnum<'ctx> {
-        match self.basic_type(ctx) {
-            Some(t) => t.as_any_type_enum(),
-            None => match self {
+        match self.as_llvm_basic_type(ctx) {
+            Ok(t) => t.as_any_type_enum(),
+            Err(_) => match self {
                 Type::Void => ctx.void_type().into(),
                 _ => unreachable!(),
             },
@@ -73,33 +102,29 @@ impl Type {
     }
 
     #[inline]
-    fn basic_type<'ctx>(&self, ctx: &'ctx Context) -> Option<BasicTypeEnum<'ctx>> {
+    pub fn as_llvm_basic_type<'ctx>(&self, ctx: &'ctx Context) -> Result<BasicTypeEnum<'ctx>> {
         match self {
-            &Self::Integer { width, .. } => Some(match width {
+            Self::Integer { width, .. } => Ok(match width {
                 8 => ctx.i8_type().into(),
                 16 => ctx.i16_type().into(),
                 32 => ctx.i32_type().into(),
                 64 => ctx.i64_type().into(),
                 128 => ctx.i128_type().into(),
-                n => ctx.custom_width_int_type(n).into(),
+                n => ctx.custom_width_int_type(*n).into(),
             }),
-            &Self::Float(width) => Some(match width {
+            Self::Float(width) => Ok(match width {
                 16 => ctx.f16_type().into(),
                 32 => ctx.f32_type().into(),
                 64 => ctx.f64_type().into(),
                 128 => ctx.f128_type().into(),
                 _ => unreachable!(),
             }),
-            Self::Array { scalar, size } => Some(scalar.basic_type(ctx)?.array_type(*size).into()),
-            &Self::Ref(_) | &Self::MutRef(_) => Some(ctx.ptr_type(Default::default()).into()),
-            _ => None,
+            Self::Array { box scalar, size } => {
+                Ok(scalar.as_llvm_basic_type(ctx)?.array_type(*size).into())
+            }
+            Self::Ref(_) | Self::MutRef(_) => Ok(ctx.ptr_type(Default::default()).into()),
+            _ => bail!("type {self:?} can't be converted to a basic type"),
         }
-    }
-
-    #[inline]
-    pub fn as_llvm_basic_type<'ctx>(&self, ctx: &'ctx Context) -> Result<BasicTypeEnum<'ctx>> {
-        self.basic_type(ctx)
-            .with_context(|| format!("type {self:?} can't be converted to a basic type"))
     }
 }
 
@@ -155,6 +180,7 @@ impl Function<'_> {
 }
 
 pub struct Runtime<'ctx> {
+    // TODO verify if rc and refcell are needed (prolly)
     pub functions: HashMap<String, Rc<RefCell<Function<'ctx>>>>,
 }
 

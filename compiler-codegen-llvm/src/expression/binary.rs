@@ -12,8 +12,8 @@ use crate::{Codegen, Function, Type, Value};
 impl<'ctx> Codegen<'ctx> {
     fn eval_side(&self, func: Rc<RefCell<Function<'ctx>>>, node: BinaryNode) -> Result<IntValue> {
         Ok(match node {
-            BinaryNode::Scalar(node) => self
-                .gen_expression(func, *node)?
+            BinaryNode::Scalar(box node) => self
+                .gen_expression(func, node)?
                 .context(anyhow!("Expected return value from expression")),
             node @ BinaryNode::Compound(..) => self.gen_binary(func, node),
         }?
@@ -23,12 +23,12 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     pub fn gen_binary(&self, func: Rc<RefCell<Function<'ctx>>>, node: BinaryNode) -> Result<Value> {
-        let BinaryNode::Compound(l, op, r) = node else {
+        let BinaryNode::Compound(box l, op, box r) = node else {
             unreachable!()
         };
 
-        let l = self.eval_side(func.clone(), *l)?;
-        let r = self.eval_side(func, *r)?;
+        let l = self.eval_side(func.clone(), l)?;
+        let r = self.eval_side(func, r)?;
 
         // TODO check for and generate according instructions for fp operands
         // same thing for signed and unsigned predicate types
