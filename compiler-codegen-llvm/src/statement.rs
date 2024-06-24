@@ -55,13 +55,15 @@ impl<'ctx> Codegen<'ctx> {
                     name.0,
                     Value {
                         inner: alloc.into(),
-                        r#type: Type::MutRef(Box::new(r#type)),
+                        r#type: Type::MutRef(Box::new(r#type.clone())),
                     },
                 );
 
                 if let Some(init) = init {
-                    self.builder
-                        .build_store(alloc, self.gen_non_void_expression(func, init)?.inner)?;
+                    self.builder.build_store(
+                        alloc,
+                        self.ref_cast(self.gen_non_void_expression(func, init)?, &r#type)?,
+                    )?;
                 }
 
                 Ok(())

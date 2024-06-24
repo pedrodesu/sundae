@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::{anyhow, bail, ensure, Result};
 use compiler_lexer::definitions::LiteralType;
 use compiler_parser::Expression;
+use inkwell::values::{BasicValue, BasicValueEnum};
 
 use crate::{Codegen, Function, Type, Value};
 
@@ -10,11 +11,49 @@ mod binary;
 
 impl<'ctx> Codegen<'ctx> {
     #[inline]
+    pub fn ref_cast(&self, from_value: Value<'ctx>, to: &Type) -> Result<BasicValueEnum<'ctx>> {
+        match [&from_value.r#type, to] {
+            [Type::MutRef(box from), Type::MutRef(box to)]
+            | [Type::Ref(box from), Type::Ref(box to)]
+            | [from, to]
+                if from == to =>
+            {
+                ensure!(*from == *to, "Cast asks for `{}`, got `{}`", from, to);
+
+                Ok(from_value.inner)
+            }
+            [from, Type::MutRef(box to)] | [from, Type::Ref(box to)] => {
+                ensure!(*from == *to, "Cast asks for `{}`, got `{}`", from, to);
+
+                let ptr = self
+                    .builder
+                    .build_alloca(from.as_llvm_basic_type(&self.ctx)?, "cast")?;
+
+                self.builder.build_store(ptr, from_value.inner)?;
+
+                Ok(ptr.as_basic_value_enum())
+            }
+            [Type::MutRef(box from), to] | [Type::Ref(box from), to] => {
+                ensure!(*from == *to, "Cast asks for `{}`, got `{}`", from, to);
+
+                let load = self.builder.build_load(
+                    to.as_llvm_basic_type(&self.ctx)?,
+                    from_value.inner.into_pointer_value(),
+                    "cast",
+                )?;
+
+                Ok(load)
+            }
+            _ => todo!(),
+        }
+    }
+
+    #[inline]
     pub fn gen_non_void_expression(
         &self,
         func: Rc<RefCell<Function<'ctx>>>,
         expression: Expression,
-    ) -> Result<Value> {
+    ) -> Result<Value<'ctx>> {
         self.gen_expression(func, expression)
             .and_then(|e| e.ok_or(anyhow!("Using a void value as expression")))
     }
@@ -23,14 +62,14 @@ impl<'ctx> Codegen<'ctx> {
         &self,
         func: Rc<RefCell<Function<'ctx>>>,
         expression: Expression,
-    ) -> Result<Option<Value>> {
+    ) -> Result<Option<Value<'ctx>>> {
         Ok(match expression {
             Expression::Literal { value, r#type } => Some(match r#type {
                 LiteralType::String => {
                     let bytes = value[1..value.len() - 1].as_bytes();
 
                     Value {
-                        inner: self.ctx.const_string(bytes, true).into(),
+                        inner: self.ctx.const_string(bytes, false).into(),
                         r#type: Type::Array {
                             scalar: Box::new(Type::Integer {
                                 width: 8,
@@ -79,9 +118,9 @@ impl<'ctx> Codegen<'ctx> {
             Expression::Call { path, args } => {
                 let name = path.last().unwrap();
 
-                let rt = self.runtime.borrow();
+                let runtime = self.runtime.borrow();
 
-                let Some(function) = rt.functions.get(name) else {
+                let Some(function) = runtime.functions.get(name) else {
                     bail!("Function `{}` not found", name);
                 };
 
@@ -90,8 +129,6 @@ impl<'ctx> Codegen<'ctx> {
                     args.into_iter()
                         .enumerate()
                         .map(|(i, e)| {
-                            let value = self.gen_non_void_expression(Rc::clone(&func), e)?;
-
                             let function = function.borrow();
                             let Some(decl_type) = function.arguments.get(i) else {
                                 bail!(
@@ -101,64 +138,9 @@ impl<'ctx> Codegen<'ctx> {
                                 );
                             };
 
-                            // TODO turn this into a function and integrate into locals and maybe assignments, normalize ref type coersion
-                            // TODO can prolly be bettered
-                            match [&value.r#type, &decl_type.1] {
-                                [Type::MutRef(box arg_base_type), Type::MutRef(box decl_base_type)]
-                                | [Type::Ref(box arg_base_type), Type::Ref(box decl_base_type)]
-                                | [arg_base_type, decl_base_type]
-                                    if arg_base_type == decl_base_type =>
-                                {
-                                    ensure!(
-                                        *arg_base_type == *decl_base_type,
-                                        "Function `{}` argument `{}` asks for a {}, got {}",
-                                        name,
-                                        decl_type.0,
-                                        arg_base_type,
-                                        decl_base_type
-                                    );
+                            let value = self.gen_non_void_expression(Rc::clone(&func), e)?;
 
-                                    Ok(value.inner.into())
-                                }
-                                [arg_base_type, Type::MutRef(box decl_base_type)] => {
-                                    ensure!(
-                                        *arg_base_type == *decl_base_type,
-                                        "Function `{}` argument `{}` asks for a {}, got {}",
-                                        name,
-                                        decl_type.0,
-                                        arg_base_type,
-                                        decl_base_type
-                                    );
-
-                                    let ptr = self.builder.build_alloca(
-                                        arg_base_type.as_llvm_basic_type(&self.ctx)?,
-                                        "cast",
-                                    )?;
-
-                                    self.builder.build_store(ptr, value.inner)?;
-
-                                    Ok(ptr.into())
-                                }
-                                [Type::MutRef(box arg_base_type), decl_base_type] => {
-                                    ensure!(
-                                        *arg_base_type == *decl_base_type,
-                                        "Function `{}` argument `{}` asks for a {}, got {}",
-                                        name,
-                                        decl_type.0,
-                                        arg_base_type,
-                                        decl_base_type
-                                    );
-
-                                    let cast = self.builder.build_load(
-                                        decl_base_type.as_llvm_basic_type(&self.ctx)?,
-                                        value.inner.into_pointer_value(),
-                                        "cast",
-                                    )?;
-
-                                    Ok(cast.into())
-                                }
-                                _ => todo!(),
-                            }
+                            Ok(self.ref_cast(value, &decl_type.1)?.into())
                         })
                         .collect::<Result<Vec<_>>>()?
                         .as_slice(),

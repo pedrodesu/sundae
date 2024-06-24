@@ -10,7 +10,11 @@ use inkwell::{
 use crate::{Codegen, Function, Type, Value};
 
 impl<'ctx> Codegen<'ctx> {
-    fn eval_side(&self, func: Rc<RefCell<Function<'ctx>>>, node: BinaryNode) -> Result<IntValue> {
+    fn eval_side(
+        &self,
+        func: Rc<RefCell<Function<'ctx>>>,
+        node: BinaryNode,
+    ) -> Result<IntValue<'ctx>> {
         Ok(match node {
             BinaryNode::Scalar(box node) => self
                 .gen_expression(func, node)?
@@ -22,7 +26,11 @@ impl<'ctx> Codegen<'ctx> {
         // TODO ^ gotta do checking before, as on other places
     }
 
-    pub fn gen_binary(&self, func: Rc<RefCell<Function<'ctx>>>, node: BinaryNode) -> Result<Value> {
+    pub fn gen_binary(
+        &self,
+        func: Rc<RefCell<Function<'ctx>>>,
+        node: BinaryNode,
+    ) -> Result<Value<'ctx>> {
         let BinaryNode::Compound(box l, op, box r) = node else {
             unreachable!()
         };

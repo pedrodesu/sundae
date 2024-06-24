@@ -6,7 +6,7 @@ func main() {
     a mut i32 := 40 // 10 * 4 = 40
     b mut i32 := 32
 
-    // c mut i32 := a // this blows up because of misconversion
+    c mut i32 := a
 
-    putd(add(a, b))
+    putd(add(c, b))
 }

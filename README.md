@@ -1,3 +1,3 @@
-Requires Rust nightly, all LLVM packages (or minimally `llvm` and `polly`), `zstd` and `libz` libraries, and (probably) a manual export of `LLVM_SYS_$(MAJOR)_PREFIX` pointing to LLVM.
+Requires Rust nightly, LLVM (tested as per `compiler/Cargo.toml`) and `mold` (for linking).
 
-Tested on LLVM version as per `compiler/Cargo.toml`
+Future plans on testing out `cranelift` as a back-end

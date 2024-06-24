@@ -10,9 +10,11 @@ entry:
   %b = alloca ptr, align 8
   store ptr %1, ptr %b, align 8
   %c = alloca i32, align 4
-  store ptr %0, ptr %c, align 8
-  store ptr %1, ptr %0, align 8
+  %cast = load i32, ptr %0, align 4
+  store i32 %cast, ptr %c, align 4
   store ptr %c, ptr %1, align 8
+  %cast1 = load i32, ptr %1, align 4
+  call void @putd(i32 %cast1)
   ret void
 }
 

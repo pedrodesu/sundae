@@ -1,7 +1,7 @@
 #![feature(box_patterns)]
 #![feature(let_chains)]
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use compiler_parser::{Type as ParserType, AST};
 use inkwell::{
     builder::Builder,
@@ -191,7 +191,7 @@ pub struct Codegen<'ctx> {
     pub runtime: Rc<RefCell<Runtime<'ctx>>>,
 }
 
-pub fn gen<'a>(module: &str, ast: AST) -> Result<()> {
+pub fn gen(module: &str, ast: AST) -> Result<()> {
     let ctx = Context::create();
 
     let codegen = {
@@ -237,6 +237,7 @@ pub fn gen<'a>(module: &str, ast: AST) -> Result<()> {
         )
         .unwrap();
 
+    // TODO remove?
     inkwell::support::load_library_permanently(Path::new("target/debug/libsundae_library.so"))
         .map_err(|m| anyhow!("Couldn't load standard library: {m}"))?;
 
@@ -282,9 +283,9 @@ pub fn gen<'a>(module: &str, ast: AST) -> Result<()> {
     // order of priority on *nix cc -> lld -> ld
     // on msvc is lld -> link.exe
     // fuck other platforms for now
-    // TODO consider mold?
     let exec = Command::new("cc")
         .args([
+            "-fuse-ld=mold",
             &format!("output/{module}.o"),
             "target/debug/libsundae_library.so",
             "-o",
@@ -293,12 +294,11 @@ pub fn gen<'a>(module: &str, ast: AST) -> Result<()> {
         .output()
         .map_err(|m| anyhow!("Couldn't link object file: {m}"))?;
 
-    if !exec.stderr.is_empty() {
-        bail!(
-            "Couldn't link object file: {}",
-            std::str::from_utf8(&exec.stderr).unwrap()
-        );
-    }
+    ensure!(
+        exec.stderr.is_empty(),
+        "Couldn't link object file: {}",
+        std::str::from_utf8(&exec.stderr).unwrap()
+    );
 
     Ok(())
 }

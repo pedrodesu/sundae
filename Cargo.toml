@@ -6,3 +6,4 @@ members = [
     "compiler-parser",
     "library",
 ]
+resolver = "2"
