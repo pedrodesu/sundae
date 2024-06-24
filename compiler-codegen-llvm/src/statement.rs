@@ -9,13 +9,13 @@ use crate::{Codegen, Function, Type, Value};
 impl<'ctx> Codegen<'ctx> {
     pub fn gen_statement(
         &self,
-        func: Rc<RefCell<Function<'ctx>>>,
+        parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
         statement: Statement,
     ) -> Result<()> {
         match statement {
             Statement::Return(e) => {
                 let ret = e
-                    .and_then(|e| self.gen_expression(func, e).transpose())
+                    .and_then(|e| self.gen_expression(parent_func, e).transpose())
                     .transpose()?;
 
                 self.builder.build_return(
@@ -25,16 +25,30 @@ impl<'ctx> Codegen<'ctx> {
 
                 Ok(())
             }
-            Statement::Expression(e) => self.gen_expression(func, e).map(|_| ()),
+            Statement::Expression(e) => self.gen_expression(parent_func, e).map(|_| ()),
             Statement::Assign {
                 destination,
                 source,
             } => {
-                let destination = self.gen_non_void_expression(Rc::clone(&func), destination)?;
+                let destination = self
+                    .gen_non_void_expression(Some(&Rc::clone(parent_func.unwrap())), destination)?;
+
+                let source = self.gen_non_void_expression(parent_func, source)?;
 
                 self.builder.build_store(
                     destination.inner.into_pointer_value(),
-                    self.gen_non_void_expression(func, source)?.inner,
+                    if let Type::Ref(box inner_type) | Type::MutRef(box inner_type) = source.r#type
+                    {
+                        let inner_ptr = source.inner.into_pointer_value();
+
+                        self.builder.build_load(
+                            inner_type.as_llvm_basic_type(&self.ctx)?,
+                            inner_ptr,
+                            "load",
+                        )?
+                    } else {
+                        source.inner
+                    },
                 )?;
 
                 Ok(())
@@ -51,7 +65,7 @@ impl<'ctx> Codegen<'ctx> {
                     .builder
                     .build_alloca(r#type.as_llvm_basic_type(&self.ctx)?, &name.0)?;
 
-                func.borrow_mut().stack.insert(
+                parent_func.as_ref().unwrap().borrow_mut().stack.insert(
                     name.0,
                     Value {
                         inner: alloc.into(),
@@ -62,7 +76,7 @@ impl<'ctx> Codegen<'ctx> {
                 if let Some(init) = init {
                     self.builder.build_store(
                         alloc,
-                        self.ref_cast(self.gen_non_void_expression(func, init)?, &r#type)?,
+                        self.ref_cast(self.gen_non_void_expression(parent_func, init)?, &r#type)?,
                     )?;
                 }
 

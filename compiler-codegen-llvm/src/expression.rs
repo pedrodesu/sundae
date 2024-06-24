@@ -51,16 +51,16 @@ impl<'ctx> Codegen<'ctx> {
     #[inline]
     pub fn gen_non_void_expression(
         &self,
-        func: Rc<RefCell<Function<'ctx>>>,
+        parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
         expression: Expression,
     ) -> Result<Value<'ctx>> {
-        self.gen_expression(func, expression)
+        self.gen_expression(parent_func, expression)
             .and_then(|e| e.ok_or(anyhow!("Using a void value as expression")))
     }
 
     pub fn gen_expression(
         &self,
-        func: Rc<RefCell<Function<'ctx>>>,
+        parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
         expression: Expression,
     ) -> Result<Option<Value<'ctx>>> {
         Ok(match expression {
@@ -105,16 +105,31 @@ impl<'ctx> Codegen<'ctx> {
             Expression::Path(path) => {
                 let name = path.last().unwrap();
 
-                let lookup = func
-                    .borrow()
-                    .stack
-                    .get(name)
-                    .ok_or_else(|| anyhow!("Identifier `{}` not found", name))?
-                    .clone();
+                if let Some(global) = self.runtime.borrow().constants.get(path[0].as_str()) {
+                    Some(Value {
+                        // TODO i *think* initializer is the global value
+                        r#type: global.r#type.clone(),
+                        inner: self
+                            .module
+                            .get_global(name)
+                            .unwrap()
+                            .get_initializer()
+                            .unwrap(),
+                    })
+                } else {
+                    // TODO impl search constants
+                    let lookup = parent_func
+                        .unwrap()
+                        .borrow()
+                        .stack
+                        .get(name)
+                        .ok_or_else(|| anyhow!("Identifier `{}` not found", name))?
+                        .clone();
 
-                Some(lookup)
+                    Some(lookup)
+                }
             }
-            Expression::Binary(n) => Some(self.gen_binary(func, n)?),
+            Expression::Binary(n) => Some(self.gen_binary(parent_func, n)?),
             Expression::Call { path, args } => {
                 let name = path.last().unwrap();
 
@@ -138,7 +153,10 @@ impl<'ctx> Codegen<'ctx> {
                                 );
                             };
 
-                            let value = self.gen_non_void_expression(Rc::clone(&func), e)?;
+                            let value = self.gen_non_void_expression(
+                                Some(&Rc::clone(parent_func.unwrap())),
+                                e,
+                            )?;
 
                             Ok(self.ref_cast(value, &decl_type.1)?.into())
                         })
@@ -157,12 +175,19 @@ impl<'ctx> Codegen<'ctx> {
                 block,
                 else_block,
             } => {
-                let then = self.ctx.append_basic_block(func.borrow().inner, "then");
-                let r#else = self.ctx.append_basic_block(func.borrow().inner, "else");
+                let then = self
+                    .ctx
+                    .append_basic_block(parent_func.unwrap().borrow().inner, "then");
+                let r#else = self
+                    .ctx
+                    .append_basic_block(parent_func.unwrap().borrow().inner, "else");
 
                 // TODO optimise else conds
                 let r#continue = if else_block.is_none() {
-                    Some(self.ctx.append_basic_block(func.borrow().inner, "continue"))
+                    Some(
+                        self.ctx
+                            .append_basic_block(parent_func.unwrap().borrow().inner, "continue"),
+                    )
                 } else {
                     None
                 };
@@ -170,7 +195,7 @@ impl<'ctx> Codegen<'ctx> {
                 self.builder.position_at_end(then);
 
                 for statement in block {
-                    self.gen_statement(Rc::clone(&func), statement)?;
+                    self.gen_statement(Some(&Rc::clone(parent_func.unwrap())), statement)?;
                 }
 
                 if let Some(r#continue) = r#continue {
@@ -182,16 +207,21 @@ impl<'ctx> Codegen<'ctx> {
                 if let Some(r#continue) = r#continue {
                     self.builder.build_unconditional_branch(r#continue)?;
                 } else {
-                    else_block
-                        .unwrap()
-                        .into_iter()
-                        .try_for_each(|s| self.gen_statement(Rc::clone(&func), s))?;
+                    else_block.unwrap().into_iter().try_for_each(|s| {
+                        self.gen_statement(Some(&Rc::clone(parent_func.unwrap())), s)
+                    })?;
                 }
 
-                self.builder
-                    .position_at_end(func.borrow().inner.get_first_basic_block().unwrap());
+                self.builder.position_at_end(
+                    parent_func
+                        .unwrap()
+                        .borrow()
+                        .inner
+                        .get_first_basic_block()
+                        .unwrap(),
+                );
 
-                let gen_condition = self.gen_non_void_expression(func, *condition)?;
+                let gen_condition = self.gen_non_void_expression(parent_func, *condition)?;
 
                 // TODO how to handle bools with our logic?
                 if !gen_condition.inner.is_int_value() {

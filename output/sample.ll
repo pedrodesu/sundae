@@ -1,6 +1,8 @@
 ; ModuleID = 'sample'
 source_filename = "sample"
 
+@MAGIC_NUMBER = constant i32 42
+
 declare void @putd(i32)
 
 define void @swap(ptr %0, ptr %1) {
@@ -12,9 +14,10 @@ entry:
   %c = alloca i32, align 4
   %cast = load i32, ptr %0, align 4
   store i32 %cast, ptr %c, align 4
-  store ptr %c, ptr %1, align 8
-  %cast1 = load i32, ptr %1, align 4
-  call void @putd(i32 %cast1)
+  %load = load i32, ptr %1, align 4
+  store i32 %load, ptr %0, align 4
+  %load1 = load i32, ptr %c, align 4
+  store i32 %load1, ptr %1, align 4
   ret void
 }
 
@@ -34,7 +37,7 @@ entry:
   %call = call i32 @op(i32 10, i32 4)
   store i32 %call, ptr %a, align 4
   %cast = alloca i32, align 4
-  store i32 32, ptr %cast, align 4
+  store i32 42, ptr %cast, align 4
   call void @swap(ptr %a, ptr %cast)
   %cast1 = load i32, ptr %a, align 4
   call void @putd(i32 %cast1)

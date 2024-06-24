@@ -6,34 +6,38 @@ use inkwell::{
     values::BasicValue,
 };
 
-use crate::{Codegen, Function, Type};
+use crate::{Codegen, Function, Type, Value};
 use compiler_parser::Item;
 
 impl<'ctx> Codegen<'ctx> {
     pub fn gen_item(&self, item: Item) -> Result<()> {
         match item {
-            Item::Const { .. } => {
-                /*
-                let r#type = self.basic_type(&name.1).unwrap();
-                let r#const = codegen
-                    .module
-                    .add_global(r#type.as_basic_type_enum(), None, &name.0);
+            Item::Const { name, value } => {
+                let r#type = Type::try_from(name.1.unwrap())?;
+                let global = self.module.add_global(
+                    r#type.as_llvm_basic_type(self.ctx)?,
+                    None,
+                    name.0.as_str(),
+                );
 
-                let value = r#type.as_basic_type_enum().const_zero();
+                global.set_constant(true);
 
-                // TODO find best way to store types.
-                r#const.set_initializer(&value);
+                self.runtime.borrow_mut().constants.insert(
+                    name.0,
+                    Value {
+                        r#type,
+                        inner: global.as_basic_value_enum(),
+                    },
+                );
 
-                /*
-                r#type
-                    .as_any_type_enum()
-                    .into_int_type()
-                    .const_int(42, true);
-                */
+                global.set_initializer(
+                    (Box::new(self.gen_non_void_expression(None, value)?.inner)
+                        as Box<dyn BasicValue>)
+                        .as_ref(),
+                );
 
-                // r#const.set_initializer(&codegen.ctx.const_string(b"sex", false));
-                */
-                todo!()
+                // TODO i might just not need my types and be able to use these bruhaps
+                Ok(())
             }
             Item::Function { signature, body } => {
                 // TODO should replace all "default" 32 with ptr type? make sure..
@@ -100,7 +104,7 @@ impl<'ctx> Codegen<'ctx> {
                 function.borrow_mut().init_args_stack(self)?;
 
                 for statement in body {
-                    self.gen_statement(Rc::clone(&function), statement.clone())?;
+                    self.gen_statement(Some(&Rc::clone(&function)), statement.clone())?;
                 }
 
                 if signature.name.0 == "main" {

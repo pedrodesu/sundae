@@ -179,9 +179,11 @@ impl Function<'_> {
     }
 }
 
+#[derive(Default)]
 pub struct Runtime<'ctx> {
     // TODO verify if rc and refcell are needed (prolly)
     pub functions: HashMap<String, Rc<RefCell<Function<'ctx>>>>,
+    pub constants: HashMap<String, Value<'ctx>>,
 }
 
 pub struct Codegen<'ctx> {
@@ -197,9 +199,7 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
     let codegen = {
         let r#mod = ctx.create_module(module);
         let builder = ctx.create_builder();
-        let runtime = Runtime {
-            functions: Default::default(),
-        };
+        let runtime = Runtime::default();
 
         Codegen {
             ctx: &ctx,
