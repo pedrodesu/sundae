@@ -81,20 +81,17 @@ impl Expression {
     pub fn parse_if(tokens: &mut TokenIt) -> Option<Self> {
         tokens.consume(|t| t.value == "if")?;
 
+        tokens.ignore_newlines();
+
         let condition = Self::get(tokens)?;
 
         let block = tokens.parse_block()?;
 
-        // TODO clone needed here??
-        let mut tokens_clone = tokens.clone();
-        tokens_clone.ignore_newlines();
+        tokens.ignore_newlines();
 
-        let r#else = if tokens_clone.consume(|t| t.value == "else").is_some() {
-            *tokens = tokens_clone;
-            tokens.parse_block()
-        } else {
-            None
-        };
+        let r#else = tokens
+            .consume(|t| t.value == "else")
+            .and_then(|_| tokens.parse_block());
 
         Some(Self::If {
             condition: Box::new(condition),

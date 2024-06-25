@@ -27,19 +27,29 @@ entry:
   store i32 %0, ptr %a, align 4
   %b = alloca i32, align 4
   store i32 %1, ptr %b, align 4
+  %gt = icmp sgt i32 %0, %1
+  br i1 %gt, label %then, label %else
+
+then:                                             ; preds = %entry
   %mul = mul i32 %0, %1
   ret i32 %mul
+
+else:                                             ; preds = %entry
+  %sum = add i32 %0, %1
+  ret i32 %sum
 }
 
 define i32 @main() {
 entry:
   %a = alloca i32, align 4
-  %call = call i32 @op(i32 10, i32 4)
+  %call = call i32 @op(i32 4, i32 10)
   store i32 %call, ptr %a, align 4
-  %cast = alloca i32, align 4
-  store i32 42, ptr %cast, align 4
-  call void @swap(ptr %a, ptr %cast)
-  %cast1 = load i32, ptr %a, align 4
+  %b = alloca i32, align 4
+  store i32 42, ptr %b, align 4
+  call void @swap(ptr %a, ptr %b)
+  %cast = load i32, ptr %a, align 4
+  call void @putd(i32 %cast)
+  %cast1 = load i32, ptr %b, align 4
   call void @putd(i32 %cast1)
   ret i32 0
 }

@@ -40,7 +40,6 @@ impl<'ctx> Codegen<'ctx> {
                 Ok(())
             }
             Item::Function { signature, body } => {
-                // TODO should replace all "default" 32 with ptr type? make sure..
                 let return_type = if signature.name.0 == "main" {
                     Type::Integer {
                         width: 32,
@@ -64,7 +63,7 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Result<Vec<_>>>()?;
 
                 let inner = {
-                    // TODO should be better
+                    // TODO i quite dislike this but they seem completely unrelated
                     let fn_type = if let Type::Void = return_type {
                         return_type
                             .as_llvm_any_type(self.ctx)

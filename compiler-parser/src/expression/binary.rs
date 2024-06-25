@@ -116,6 +116,7 @@ impl BinaryNode {
 
     fn consume(tokens: &mut TokenIt) -> Option<Self> {
         let mut acc = Self::factor(tokens)?;
+        // TODO manage whitespace between binary (and multiple other instances, such as assign)
         while let Some(t) = tokens.0.next_if(|t| {
             Operator::try_from(t)
                 .ok()

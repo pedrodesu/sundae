@@ -146,7 +146,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hexadecimal_is_correct() {
+    fn hexadecimal_passes() {
         assert!(TokenType::is_hex_int("0x42069FFFff"));
         assert!(TokenType::is_hex_int("0xffffffffffffffffffffffffffffffff"));
 
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn octal_is_correct() {
+    fn octal_passes() {
         assert!(TokenType::is_oct_int("0o01234567"));
         assert!(TokenType::is_oct_int("0o777"));
 
@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_is_correct() {
+    fn binary_passes() {
         assert!(TokenType::is_bin_int("0b000101010010101010101"));
         assert!(TokenType::is_bin_int("0b1010"));
 
@@ -179,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn decimal_is_correct() {
+    fn decimal_passes() {
         assert!(TokenType::is_dec_int("1234"));
         assert!(TokenType::is_dec_int("01234"));
         assert!(TokenType::is_dec_int("-42"));
@@ -189,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn float_is_correct() {
+    fn float_passes() {
         assert!(TokenType::is_float("12.34"));
         assert!(TokenType::is_float("01234.00"));
         assert!(TokenType::is_float("-42.060"));
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn identifier_is_correct() {
+    fn identifier_passes() {
         assert!(TokenType::is_identifier("abc"));
         assert!(TokenType::is_identifier("abc_def"));
         assert!(TokenType::is_identifier("_abc_"));

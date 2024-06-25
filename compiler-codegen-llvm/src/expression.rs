@@ -44,7 +44,7 @@ impl<'ctx> Codegen<'ctx> {
 
                 Ok(load)
             }
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 
@@ -107,7 +107,6 @@ impl<'ctx> Codegen<'ctx> {
 
                 if let Some(global) = self.runtime.borrow().constants.get(path[0].as_str()) {
                     Some(Value {
-                        // TODO i *think* initializer is the global value
                         r#type: global.r#type.clone(),
                         inner: self
                             .module
@@ -117,7 +116,6 @@ impl<'ctx> Codegen<'ctx> {
                             .unwrap(),
                     })
                 } else {
-                    // TODO impl search constants
                     let lookup = parent_func
                         .unwrap()
                         .borrow()
@@ -223,7 +221,6 @@ impl<'ctx> Codegen<'ctx> {
 
                 let gen_condition = self.gen_non_void_expression(parent_func, *condition)?;
 
-                // TODO how to handle bools with our logic?
                 if !gen_condition.inner.is_int_value() {
                     bail!("Expected condition, got {:?}", gen_condition.r#type);
                 }

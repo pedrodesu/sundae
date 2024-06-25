@@ -1,11 +1,15 @@
+// TODO add extensive parser testing. implement arrays, generics and type inference. mut check and use and add proper std
+
 // array of runes ([11]rune)
 const MAGIC_STR [11]rune = "Hello world"
 // defaults to an i32
 const MAGIC_NUMBER = 42
 
+/*
 func read_fd(fd i32) {
     file mut := open(fd)
 }
+*/
 
 // T is inferred and doesn't have to be passed in the call
 // it is also const, so must be known at compile time (it's a generic, makes sense) (a type must be const, then)

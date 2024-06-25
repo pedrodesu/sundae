@@ -29,80 +29,81 @@ impl ExhaustiveGet for Statement {
 
 impl Statement {
     #[inline]
-    fn common(tokens: &mut TokenIt) -> Option<()> {
+    fn assert_end(
+        tokens: &mut TokenIt,
+        predicate: impl Fn(&mut TokenIt) -> Option<Self>,
+    ) -> Option<Self> {
+        let value = predicate(tokens)?;
+
         tokens.consume(|t| t.r#type == TokenType::Newline)?;
 
-        Some(())
+        Some(value)
     }
 
+    #[inline]
     pub fn parse_return(tokens: &mut TokenIt) -> Option<Self> {
-        tokens.consume(|t| t.value == "ret")?;
+        Self::assert_end(tokens, |tokens| {
+            tokens.consume(|t| t.value == "ret")?;
 
-        let expr = if tokens.0.peek()?.r#type != TokenType::Newline {
-            Some(Expression::get(tokens)?)
-        } else {
-            None
-        };
-
-        Self::common(tokens)?;
-
-        Some(Self::Return(expr))
+            Some(Self::Return(
+                if tokens.0.peek()?.r#type != TokenType::Newline {
+                    Some(Expression::get(tokens)?) // needs Some(x)? to assert it gets a valid expression
+                } else {
+                    None
+                },
+            ))
+        })
     }
 
     #[inline]
     pub fn parse_expression(tokens: &mut TokenIt) -> Option<Self> {
-        let expr = Expression::get(tokens)?;
-
-        Self::common(tokens)?;
-
-        Some(Self::Expression(expr))
+        Self::assert_end(tokens, |tokens| {
+            Expression::get(tokens).map(Self::Expression)
+        })
     }
 
     pub fn parse_assign(tokens: &mut TokenIt) -> Option<Self> {
-        let destination = Expression::get(tokens)?;
+        Self::assert_end(tokens, |tokens| {
+            let destination = Expression::get(tokens)?;
 
-        tokens.consume(|t| t.value == "=")?;
+            tokens.consume(|t| t.value == "=")?;
 
-        let source = Expression::get(tokens)?;
+            let source = Expression::get(tokens)?;
 
-        Self::common(tokens)?;
-
-        Some(Self::Assign {
-            destination,
-            source,
+            Some(Self::Assign {
+                destination,
+                source,
+            })
         })
     }
 
     pub fn parse_local(tokens: &mut TokenIt) -> Option<Self> {
-        let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
+        Self::assert_end(tokens, |tokens| {
+            let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
-        let mutable = tokens.consume(|t| t.value == "mut").is_some();
+            let mutable = tokens.consume(|t| t.value == "mut").is_some();
 
-        // TODO use actual format to get type info
-        let r#type = if tokens.0.peek()?.value != ":=" {
-            Some(Type(
-                tokens
-                    .0
-                    .peeking_take_while(|t| t.value != ":=")
-                    .map(|t| t.value)
-                    .collect(),
-            ))
-        } else {
-            None
-        };
+            let r#type = if tokens.0.peek()?.value != ":=" {
+                Some(Type(
+                    tokens
+                        .0
+                        .peeking_take_while(|t| t.value != ":=" && t.r#type != TokenType::Newline)
+                        .map(|t| t.value)
+                        .collect(),
+                ))
+            } else {
+                None
+            };
 
-        let init = if tokens.consume(|t| t.value == ":=").is_some() {
-            Expression::get(tokens)
-        } else {
-            None
-        };
+            let init = tokens
+                .consume(|t| t.value == ":=")
+                .and_then(|_| Expression::get(tokens));
 
-        Self::common(tokens)?;
-
-        Some(Self::Local {
-            name: Name(identifier, r#type),
-            mutable,
-            init,
+            Some(Self::Local {
+                name: Name(identifier, r#type),
+                mutable,
+                init,
+            })
         })
     }
 }

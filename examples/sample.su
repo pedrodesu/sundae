@@ -4,34 +4,27 @@ func swap(a &mut i32, b &mut i32) {
     b = c
 }
 
-// mut &mut T
-//     &mut T
-//     &T
-//     T
-
-
-// mut and const are intrinsic to the "stack variable" (allow exceptionally in global/local and arg declarations)
-// &mut T, &T and T are all different types. completely detaching themselves from any variable or special form
-
 // mut can be mutated, immutable by default
 // const implies value at compile time (aka zig's comptime)
-
-// &T      dereferences to T
-// &mut T  dereferences to mut T
-
-// unallow anything such as references of references of references ("viral references")
-// no dereferencing, whether a reference or the inner value is necessary is determined through context (a la C++)
 
 const MAGIC_NUMBER i32 = 42
 
 func op(a i32, b i32) i32 {
-    ret a * b
+    if a > b {
+        ret a * b
+    } else {
+        ret a + b
+    }
 }
 
 func main() {
-    a mut i32 := op(10, 4)
+    a mut i32 := op(4, 10)
+    b i32
+    
+    b = MAGIC_NUMBER
 
-    swap(a, MAGIC_NUMBER)
+    swap(a, b)
 
     putd(a)
+    putd(b)
 }

@@ -29,7 +29,7 @@ impl Iterator for Lexer<'_> {
                 matches!(self.iterator.peek(), None | Some('\n')),
             ) {
                 if let Some(&next) = self.iterator.peek() {
-                    let next_acc = acc.clone() + next.encode_utf8(&mut [0u8; 4]);
+                    let next_acc = acc.clone() + next.encode_utf8(&mut [0; 4]);
                     let next_t = TokenType::eval(next_acc.as_str(), false); // end of comment doesn't matter on peek
 
                     if next_t

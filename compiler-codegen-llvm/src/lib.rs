@@ -18,7 +18,6 @@ mod expression;
 mod item;
 mod statement;
 
-// TODO use directly in the parser?
 #[derive(Clone, PartialEq, Debug)]
 pub enum Type {
     Integer { width: u32, signed: bool },
@@ -55,7 +54,6 @@ impl TryFrom<ParserType> for Type {
     type Error = anyhow::Error;
 
     fn try_from(value: ParserType) -> Result<Self, Self::Error> {
-        // TODO better this
         if let [a, b, c @ ..] = value.0.as_slice()
             && let ["&", "mut"] = [a.as_str(), b.as_str()]
         {
@@ -181,7 +179,6 @@ impl Function<'_> {
 
 #[derive(Default)]
 pub struct Runtime<'ctx> {
-    // TODO verify if rc and refcell are needed (prolly)
     pub functions: HashMap<String, Rc<RefCell<Function<'ctx>>>>,
     pub constants: HashMap<String, Value<'ctx>>,
 }
@@ -236,10 +233,6 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
             CodeModel::Default,
         )
         .unwrap();
-
-    // TODO remove?
-    inkwell::support::load_library_permanently(Path::new("target/debug/libsundae_library.so"))
-        .map_err(|m| anyhow!("Couldn't load standard library: {m}"))?;
 
     codegen.runtime.borrow_mut().functions.insert(
         "putd".to_string(),
