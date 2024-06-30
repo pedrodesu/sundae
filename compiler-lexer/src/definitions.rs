@@ -18,6 +18,7 @@ pub(super) fn allow_type_transmutation(
     (next, next_type): (&str, Option<TokenType>),
 ) -> bool {
     (curr_type == TokenType::Identifier && matches!(next_type, Some(TokenType::Keyword)))
+        || (curr_type == TokenType::Keyword && matches!(next_type, Some(TokenType::Identifier)))
         || (curr_type == TokenType::Literal(LiteralType::Int)
             && matches!(next_type, Some(TokenType::Literal(LiteralType::Float))))
         || matches!(next, "0x" | "0o" | "0b")
@@ -42,7 +43,7 @@ pub enum TokenType {
     Newline,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub value: String,
     pub r#type: TokenType,

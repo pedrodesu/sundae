@@ -8,19 +8,17 @@ fn main() -> Result<()> {
 
     let module = {
         let path = Path::new(&path);
-        let name = path
-            .file_name()
-            .unwrap()
-            .to_str()
-            .expect("Invalid file name");
-        name.rsplit_once('.').map(|(l, _)| l).unwrap_or(name)
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        name.rsplit_once('.')
+            .map(|n| n.0.to_string())
+            .unwrap_or(name)
     };
 
     let tokens = compiler_lexer::tokenize(&file)
         .context("Lexer failed")?
         .into_iter()
         .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment)
-        .collect::<Vec<_>>();
+        .collect();
 
     // tokens.iter().for_each(|t| println!("{:?}", t));
 
@@ -28,9 +26,7 @@ fn main() -> Result<()> {
 
     // println!("{ast:#?}");
 
-    compiler_codegen_llvm::gen(module, ast)?;
+    compiler_codegen_llvm::gen(module.as_str(), ast)?;
 
     Ok(())
 }
-
-// adhere to syntax on sample.su

@@ -18,8 +18,6 @@ impl Iterator for Lexer<'_> {
     type Item = Result<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut acc = String::new();
-
         self.iterator
             .peeking_take_while(|&c| c.is_ascii_whitespace() && c != '\n')
             .for_each(drop);
@@ -56,6 +54,8 @@ impl Iterator for Lexer<'_> {
             }));
         }
 
+        let mut acc = String::new();
+
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
@@ -64,6 +64,7 @@ impl Iterator for Lexer<'_> {
                     let next_acc = acc.clone() + next.encode_utf8(&mut [0; 4]);
                     let next_t = TokenType::eval(next_acc.as_str());
 
+                    // if next_t.is_some() {
                     if next_t
                         .is_some_and(|next_t| mem::discriminant(&t) == mem::discriminant(&next_t))
                         || allow_type_transmutation((acc.as_str(), t), (next_acc.as_str(), next_t))
