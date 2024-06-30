@@ -4,21 +4,20 @@ func swap(a &mut i32, b &mut i32) {
     b = c
 }
 
-// mut can be mutated, immutable by default
-// const implies value at compile time (aka zig's comptime)
-
 const MAGIC_NUMBER i32 = 42
 
 func op(a i32, b i32) i32 {
-    if a > b {
-        ret a * b
+    if
+        a > b
+        {
+        ret a * b // -a * b
     } else {
         ret a + b
     }
 }
 
 func main() {
-    a mut i32 := op(4, 10)
+    a i32 := op(4, 10)
     b i32
     
     b = MAGIC_NUMBER

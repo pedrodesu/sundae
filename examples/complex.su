@@ -1,4 +1,8 @@
-// TODO add extensive parser testing. implement arrays, generics and type inference. mut check and use and add proper std
+// TODO make errors everywhere more comprehensive (lexer seems ok now). and attach src, line and col
+// add extensive parser testing.
+// implement arrays, generics and type inference.
+// mut check
+// use and add proper std
 
 // array of runes ([11]rune)
 const MAGIC_STR [11]rune = "Hello world"
