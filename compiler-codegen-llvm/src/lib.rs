@@ -12,7 +12,7 @@ use inkwell::{
     values::{BasicValueEnum, FunctionValue},
     OptimizationLevel,
 };
-use std::{cell::RefCell, collections::HashMap, fmt, path::Path, process::Command, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, fs, path::PathBuf, process::Command, rc::Rc};
 
 mod expression;
 mod item;
@@ -63,7 +63,7 @@ impl TryFrom<ParserType> for Type {
         {
             return Ok(Self::Ref(Box::new(ParserType(b.to_vec()).try_into()?)));
         } else {
-            let r#type = &value.0[0]; // TODO assume for now
+            let r#type = &value.0[0]; // TODO assume for now, modify when we have structs (and fields, thus)
 
             let (signedness, bits) = r#type.split_at(1);
             if matches!(signedness, "u" | "i") {
@@ -160,7 +160,7 @@ impl Function<'_> {
             .clone()
             .into_iter()
             .zip(self.inner.get_param_iter())
-            .map(|((name, r#type), arg)| {
+            .try_for_each(|((name, r#type), arg)| {
                 let ptr = codegen
                     .builder
                     .build_alloca(r#type.as_llvm_basic_type(&codegen.ctx)?, &name)?;
@@ -171,9 +171,6 @@ impl Function<'_> {
 
                 Ok(())
             })
-            .collect::<Result<Vec<_>>>()?;
-
-        Ok(())
     }
 }
 
@@ -190,7 +187,7 @@ pub struct Codegen<'ctx> {
     pub runtime: Rc<RefCell<Runtime<'ctx>>>,
 }
 
-pub fn gen(module: &str, ast: AST) -> Result<()> {
+pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Result<()> {
     let ctx = Context::create();
 
     let codegen = {
@@ -259,17 +256,35 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
 
     ast.0.into_iter().try_for_each(|i| codegen.gen_item(i))?;
 
-    codegen
-        .module
-        .print_to_file(format!("output/{module}.ll"))
-        .map_err(|m| anyhow!("Couldn't output LLVM IR: {m}"))?;
+    let output_path = {
+        let base = output_path.unwrap_or_default();
+        // hacky way to check for trailing slash because Components (https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.components)
+        if base.as_os_str().is_empty()
+            || base.to_string_lossy().ends_with(std::path::MAIN_SEPARATOR)
+        {
+            base.join(module)
+        } else {
+            base
+        }
+    };
+
+    if let Some(root_path) = output_path.parent() {
+        fs::create_dir_all(root_path)?;
+    }
+
+    if ir {
+        let ir_path = output_path.with_extension("ll");
+
+        codegen
+            .module
+            .print_to_file(ir_path)
+            .map_err(|m| anyhow!("Couldn't output LLVM IR: {m}"))?;
+    }
+
+    let object_path = output_path.with_extension("o");
 
     machine
-        .write_to_file(
-            &codegen.module,
-            FileType::Object,
-            Path::new(&format!("output/{module}.o")),
-        )
+        .write_to_file(&codegen.module, FileType::Object, &object_path)
         .map_err(|m| anyhow!("Couldn't write to object file: {m}"))?;
 
     // See https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/back/link.rs#L1280
@@ -279,17 +294,17 @@ pub fn gen(module: &str, ast: AST) -> Result<()> {
     let exec = Command::new("cc")
         .args([
             "-fuse-ld=mold",
-            &format!("output/{module}.o"),
+            object_path.to_str().unwrap(),
             "target/debug/libsundae_library.so",
             "-o",
-            &format!("output/{module}"),
+            output_path.to_str().unwrap(),
         ])
         .output()
-        .map_err(|m| anyhow!("Couldn't link object file: {m}"))?;
+        .map_err(|m| anyhow!("Error linking object file: {m}"))?;
 
     ensure!(
         exec.stderr.is_empty(),
-        "Couldn't link object file: {}",
+        "Error linking object file: {}",
         std::str::from_utf8(&exec.stderr).unwrap()
     );
 

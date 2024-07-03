@@ -1,5 +1,6 @@
 [package]
-name = "compiler-driver"
+name = "sundae"
+description = "Compiler for sundae"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,3 +9,4 @@ anyhow = "1.0.86"
 compiler-lexer = { path = "../compiler-lexer" }
 compiler-parser = { path = "../compiler-parser" }
 compiler-codegen-llvm = { path = "../compiler-codegen-llvm" }
+clap = { version = "4.5.8", features = ["derive"] }

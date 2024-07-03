@@ -1,18 +1,43 @@
-use std::{env, fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use clap::Parser;
+
+#[derive(clap::Parser)]
+#[command(version, about)]
+struct Args {
+    /// Dump intermediate representation to a file
+    #[arg(short, long)]
+    ir: bool,
+
+    /// Output file path
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Source file path
+    #[arg(value_parser = path_is_valid_file)]
+    source: PathBuf,
+}
+
+fn path_is_valid_file(s: &str) -> Result<PathBuf> {
+    let path = Path::new(s);
+    if path.is_file() {
+        Ok(path.to_owned())
+    } else {
+        bail!("Path isn't a valid file")
+    }
+}
 
 fn main() -> Result<()> {
-    let path = env::args().nth(1).expect("no path");
-    let file = fs::read_to_string(&path).expect("couldn't read file");
+    let Args { ir, output, source } = Args::parse();
 
-    let module = {
-        let path = Path::new(&path);
-        let name = path.file_name().unwrap().to_string_lossy().to_string();
-        name.rsplit_once('.')
-            .map(|n| n.0.to_string())
-            .unwrap_or(name)
-    };
+    let file = fs::read_to_string(&source)
+        .with_context(|| format!("Couldn't read file from path `{}`", source.display()))?;
+
+    let module = source.file_stem().unwrap().to_str().unwrap();
 
     let tokens = compiler_lexer::tokenize(&file)
         .context("Lexer failed")?
@@ -26,7 +51,7 @@ fn main() -> Result<()> {
 
     // println!("{ast:#?}");
 
-    compiler_codegen_llvm::gen(module.as_str(), ast)?;
+    compiler_codegen_llvm::gen(module, ast, ir, output)?;
 
     Ok(())
 }

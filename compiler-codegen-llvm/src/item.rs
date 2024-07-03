@@ -36,7 +36,6 @@ impl<'ctx> Codegen<'ctx> {
                         .as_ref(),
                 );
 
-                // TODO i might just not need my types and be able to use these bruhaps
                 Ok(())
             }
             Item::Function { signature, body } => {
@@ -63,28 +62,20 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Result<Vec<_>>>()?;
 
                 let inner = {
-                    // TODO i quite dislike this but they seem completely unrelated
+                    let arguments = arguments
+                        .iter()
+                        .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
+                        .collect::<Result<Vec<_>>>()?;
+
                     let fn_type = if let Type::Void = return_type {
                         return_type
                             .as_llvm_any_type(self.ctx)
                             .into_void_type()
-                            .fn_type(
-                                arguments
-                                    .iter()
-                                    .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
-                                    .collect::<Result<Vec<_>>>()?
-                                    .as_slice(),
-                                false,
-                            )
+                            .fn_type(arguments.as_slice(), false)
                     } else {
-                        return_type.as_llvm_basic_type(self.ctx)?.fn_type(
-                            arguments
-                                .iter()
-                                .map(|(_, t)| t.as_llvm_basic_type(self.ctx).map(|t| t.into()))
-                                .collect::<Result<Vec<_>>>()?
-                                .as_slice(),
-                            false,
-                        )
+                        return_type
+                            .as_llvm_basic_type(self.ctx)?
+                            .fn_type(arguments.as_slice(), false)
                     };
 
                     self.module

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use compiler_parser::{BinaryNode, Operator};
 use inkwell::{
     values::{BasicValue, IntValue},
@@ -16,11 +16,9 @@ impl<'ctx> Codegen<'ctx> {
         node: BinaryNode,
     ) -> Result<IntValue<'ctx>> {
         Ok(match node {
-            BinaryNode::Scalar(box node) => self
-                .gen_expression(parent_func, node)?
-                .context(anyhow!("Expected return value from expression")),
-            node @ BinaryNode::Compound(..) => self.gen_binary(parent_func, node),
-        }?
+            BinaryNode::Scalar(box node) => self.gen_non_void_expression(parent_func, node)?,
+            node @ BinaryNode::Compound(..) => self.gen_binary(parent_func, node)?,
+        }
         .inner
         .into_int_value())
         // TODO ^ gotta do checking before, as on other places
