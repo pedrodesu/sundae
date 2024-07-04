@@ -1,7 +1,7 @@
 use compiler_lexer::definitions::TokenType;
 use itertools::Itertools;
 
-use crate::{expression::Expression, ExhaustiveGet, Name, TokenIt, Type};
+use crate::{expression::Expression, iterator::TokenItTrait, ExhaustiveGet, Name, TokenIt, Type};
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -18,8 +18,8 @@ pub enum Statement {
     },
 }
 
-impl ExhaustiveGet for Statement {
-    const PARSE_OPTIONS: &'static [fn(&mut TokenIt) -> Option<Self>] = &[
+impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Statement {
+    const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] = &[
         Self::parse_return,
         Self::parse_expression,
         Self::parse_assign,
@@ -29,9 +29,9 @@ impl ExhaustiveGet for Statement {
 
 impl Statement {
     #[inline]
-    fn assert_end(
-        tokens: &mut TokenIt,
-        predicate: impl Fn(&mut TokenIt) -> Option<Self>,
+    fn assert_end<I: TokenItTrait>(
+        tokens: &mut TokenIt<I>,
+        predicate: impl Fn(&mut TokenIt<I>) -> Option<Self>,
     ) -> Option<Self> {
         let value = predicate(tokens)?;
 
@@ -41,7 +41,7 @@ impl Statement {
     }
 
     #[inline]
-    pub fn parse_return(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_return<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::assert_end(tokens, |tokens| {
             tokens.consume(|t| t.value == "ret")?;
 
@@ -56,13 +56,13 @@ impl Statement {
     }
 
     #[inline]
-    pub fn parse_expression(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_expression<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::assert_end(tokens, |tokens| {
             Expression::get(tokens).map(Self::Expression)
         })
     }
 
-    pub fn parse_assign(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_assign<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::assert_end(tokens, |tokens| {
             let destination = Expression::get(tokens)?;
 
@@ -77,7 +77,7 @@ impl Statement {
         })
     }
 
-    pub fn parse_local(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_local<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::assert_end(tokens, |tokens| {
             let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 

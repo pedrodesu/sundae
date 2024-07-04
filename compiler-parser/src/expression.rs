@@ -1,6 +1,6 @@
 use compiler_lexer::definitions::{LiteralType, Token, TokenType};
 
-use crate::{statement::Statement, ExhaustiveGet, TokenIt};
+use crate::{iterator::TokenItTrait, statement::Statement, ExhaustiveGet, TokenIt};
 
 use self::binary::BinaryNode;
 
@@ -25,8 +25,8 @@ pub enum Expression {
     },
 }
 
-impl ExhaustiveGet for Expression {
-    const PARSE_OPTIONS: &'static [fn(&mut TokenIt) -> Option<Self>] = &[
+impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Expression {
+    const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] = &[
         Self::parse_if,
         Self::parse_binary,
         Self::parse_literal,
@@ -37,7 +37,7 @@ impl ExhaustiveGet for Expression {
 
 impl Expression {
     #[inline]
-    pub fn parse_literal(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_literal<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         if let Token {
             value,
             r#type: TokenType::Literal(lit_type),
@@ -52,7 +52,7 @@ impl Expression {
         }
     }
 
-    pub fn parse_path(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_path<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         let mut path = Vec::new();
 
         while path.is_empty() || tokens.consume(|t| t.value == ".").is_some() {
@@ -64,11 +64,11 @@ impl Expression {
     }
 
     #[inline]
-    pub fn parse_binary(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_binary<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         BinaryNode::parse(tokens).map(Self::Binary)
     }
 
-    pub fn parse_call(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_call<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         let Self::Path(path) = Self::parse_path(tokens)? else {
             unreachable!()
         };
@@ -78,7 +78,7 @@ impl Expression {
         Some(Self::Call { path, args })
     }
 
-    pub fn parse_if(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_if<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         tokens.consume(|t| t.value == "if")?;
 
         tokens.ignore_newlines();

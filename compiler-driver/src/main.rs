@@ -22,6 +22,7 @@ struct Args {
     source: PathBuf,
 }
 
+#[inline]
 fn path_is_valid_file(s: &str) -> Result<PathBuf> {
     let path = Path::new(s);
     if path.is_file() {
@@ -41,14 +42,13 @@ fn main() -> Result<()> {
 
     let tokens = compiler_lexer::tokenize(&file)
         .context("Lexer failed")?
-        .into_iter()
-        .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment)
-        .collect();
+        .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment);
 
-    // tokens.iter().for_each(|t| println!("{:?}", t));
+    // tokens.clone().for_each(|t| println!("{:?}", t));
 
     let ast = compiler_parser::parse(tokens);
 
+    // TODO profile smallstrs / smartstrs
     // println!("{ast:#?}");
 
     compiler_codegen_llvm::gen(module, ast, ir, output)?;

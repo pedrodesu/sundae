@@ -180,7 +180,6 @@ impl<'ctx> Codegen<'ctx> {
                     .ctx
                     .append_basic_block(parent_func.unwrap().borrow().inner, "else");
 
-                // TODO optimise else conds
                 let r#continue = if else_block.is_none() {
                     Some(
                         self.ctx

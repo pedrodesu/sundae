@@ -2,7 +2,8 @@ use compiler_lexer::definitions::TokenType;
 use itertools::Itertools;
 
 use crate::{
-    expression::Expression, statement::Statement, ArgumentName, ExhaustiveGet, Name, TokenIt, Type,
+    expression::Expression, iterator::TokenItTrait, statement::Statement, ArgumentName,
+    ExhaustiveGet, Name, TokenIt, Type,
 };
 
 #[derive(Debug)]
@@ -23,13 +24,13 @@ pub enum Item {
     },
 }
 
-impl ExhaustiveGet for Item {
-    const PARSE_OPTIONS: &'static [fn(&mut TokenIt) -> Option<Self>] =
+impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Item {
+    const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] =
         &[Self::parse_const, Self::parse_function];
 }
 
 impl Item {
-    pub fn parse_const(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_const<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         tokens.consume(|t| t.value == "const")?;
 
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
@@ -57,7 +58,7 @@ impl Item {
         })
     }
 
-    pub fn parse_function(tokens: &mut TokenIt) -> Option<Self> {
+    pub fn parse_function<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         tokens.consume(|t| t.value == "func")?;
 
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;

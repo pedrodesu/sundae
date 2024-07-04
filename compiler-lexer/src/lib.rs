@@ -1,7 +1,7 @@
 #![feature(iter_next_chunk)]
 #![feature(let_chains)]
 
-use std::{iter::Peekable, mem, str::Chars};
+use std::{fmt, iter::Peekable, mem, str::Chars};
 
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
@@ -10,6 +10,7 @@ use self::definitions::*;
 
 pub mod definitions;
 
+#[derive(Debug, Clone)]
 struct Lexer<'a> {
     iterator: Peekable<Chars<'a>>,
 }
@@ -90,9 +91,9 @@ impl Iterator for Lexer<'_> {
 }
 
 #[inline(always)]
-pub fn tokenize(input: &str) -> Result<Vec<Token>> {
-    Lexer {
+pub fn tokenize(input: &str) -> Result<impl Iterator<Item = Token> + '_ + fmt::Debug + Clone> {
+    Ok(Lexer {
         iterator: input.chars().peekable(),
     }
-    .collect()
+    .flatten())
 }
