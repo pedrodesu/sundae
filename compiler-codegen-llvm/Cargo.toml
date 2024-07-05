@@ -10,3 +10,4 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 ] }
 compiler-parser = { path = "../compiler-parser" }
 compiler-lexer = { path = "../compiler-lexer" }
+ecow = "0.2.2"

@@ -1,4 +1,5 @@
 use compiler_lexer::definitions::{LiteralType, Token, TokenType};
+use ecow::EcoString;
 
 use crate::{iterator::TokenItTrait, statement::Statement, ExhaustiveGet, TokenIt};
 
@@ -9,13 +10,13 @@ pub mod binary;
 #[derive(Clone, Debug)]
 pub enum Expression {
     Literal {
-        value: String,
+        value: EcoString,
         r#type: LiteralType,
     },
-    Path(Vec<String>),
+    Path(Vec<EcoString>),
     Binary(BinaryNode),
     Call {
-        path: Vec<String>,
+        path: Vec<EcoString>,
         args: Vec<Expression>,
     },
     If {

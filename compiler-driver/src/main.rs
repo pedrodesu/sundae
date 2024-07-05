@@ -6,6 +6,9 @@ use std::{
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 #[derive(clap::Parser)]
 #[command(version, about)]
 struct Args {
@@ -40,15 +43,25 @@ fn main() -> Result<()> {
 
     let module = source.file_stem().unwrap().to_str().unwrap();
 
-    let tokens = compiler_lexer::tokenize(&file)
-        .context("Lexer failed")?
-        .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment);
+    let tokens = compiler_lexer::tokenize(&file);
+
+    tokens
+        .clone()
+        .try_for_each(|e| {
+            e?;
+
+            anyhow::Ok(())
+        })
+        .context("Lexer failed")?;
 
     // tokens.clone().for_each(|t| println!("{:?}", t));
 
-    let ast = compiler_parser::parse(tokens);
+    let ast = compiler_parser::parse(
+        tokens
+            .flatten()
+            .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment),
+    );
 
-    // TODO profile smallstrs / smartstrs
     // println!("{ast:#?}");
 
     compiler_codegen_llvm::gen(module, ast, ir, output)?;

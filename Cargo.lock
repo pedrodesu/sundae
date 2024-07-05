@@ -116,6 +116,7 @@ dependencies = [
  "anyhow",
  "compiler-lexer",
  "compiler-parser",
+ "ecow",
  "inkwell",
 ]
 
@@ -124,6 +125,7 @@ name = "compiler-lexer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ecow",
  "itertools",
  "pretty_assertions",
 ]
@@ -133,6 +135,7 @@ name = "compiler-parser"
 version = "0.1.0"
 dependencies = [
  "compiler-lexer",
+ "ecow",
  "itertools",
 ]
 
@@ -141,6 +144,12 @@ name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
+
+[[package]]
+name = "ecow"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54bfbb1708988623190a6c4dbedaeaf0f53c20c6395abd6a01feb327b3146f4b"
 
 [[package]]
 name = "either"
@@ -279,6 +288,7 @@ dependencies = [
  "compiler-codegen-llvm",
  "compiler-lexer",
  "compiler-parser",
+ "tikv-jemallocator",
 ]
 
 [[package]]
@@ -314,6 +324,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.5.4+5.3.0-patched"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
 ]
 
 [[package]]

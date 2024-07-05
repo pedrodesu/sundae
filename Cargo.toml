@@ -16,5 +16,4 @@ codegen-units = 1
 panic = "abort"
 
 [profile.dev]
-debug = 0
 codegen-backend = "cranelift"

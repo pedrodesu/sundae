@@ -6,5 +6,7 @@ const SOURCE: &str = r#"func abc() {
 
 #[test]
 fn lexer_passes() {
-    compiler_lexer::tokenize(SOURCE).unwrap_err();
+    compiler_lexer::tokenize(SOURCE)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_err();
 }

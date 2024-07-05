@@ -3,6 +3,7 @@
 
 use anyhow::{anyhow, bail, ensure, Result};
 use compiler_parser::{Type as ParserType, AST};
+use ecow::EcoString;
 use inkwell::{
     builder::Builder,
     context::Context,
@@ -141,9 +142,9 @@ pub struct Local<'ctx> {
 
 #[derive(Clone, Debug)]
 pub struct Function<'ctx> {
-    pub arguments: Vec<(String, Type)>,
+    pub arguments: Vec<(EcoString, Type)>,
     pub return_type: Type,
-    pub stack: HashMap<String, Value<'ctx>>,
+    pub stack: HashMap<EcoString, Value<'ctx>>,
     pub inner: FunctionValue<'ctx>,
 }
 
@@ -176,8 +177,8 @@ impl Function<'_> {
 
 #[derive(Default)]
 pub struct Runtime<'ctx> {
-    pub functions: HashMap<String, Rc<RefCell<Function<'ctx>>>>,
-    pub constants: HashMap<String, Value<'ctx>>,
+    pub functions: HashMap<EcoString, Rc<RefCell<Function<'ctx>>>>,
+    pub constants: HashMap<EcoString, Value<'ctx>>,
 }
 
 pub struct Codegen<'ctx> {
@@ -232,10 +233,10 @@ pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Re
         .unwrap();
 
     codegen.runtime.borrow_mut().functions.insert(
-        "putd".to_string(),
+        "putd".into(),
         Rc::new(RefCell::new(Function {
             arguments: vec![(
-                "n".to_string(),
+                "n".into(),
                 Type::Integer {
                     width: 32,
                     signed: true,

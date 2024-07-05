@@ -10,3 +10,4 @@ compiler-lexer = { path = "../compiler-lexer" }
 compiler-parser = { path = "../compiler-parser" }
 compiler-codegen-llvm = { path = "../compiler-codegen-llvm" }
 clap = { version = "4.5.8", features = ["derive"] }
+tikv-jemallocator = "0.5.4"

@@ -4,6 +4,7 @@ use std::fmt::Debug;
 
 use compiler_lexer::definitions::TokenType;
 
+use ecow::EcoString;
 pub use expression::{
     binary::{BinaryNode, Operator},
     Expression,
@@ -18,15 +19,15 @@ mod iterator;
 mod statement;
 
 #[derive(Debug, Clone)]
-pub struct Type(pub Vec<String>);
+pub struct Type(pub Vec<EcoString>);
 
 #[derive(Debug, Clone)]
-pub struct ArgumentName(pub String, pub Type);
+pub struct ArgumentName(pub EcoString, pub Type);
 
 #[derive(Debug, Clone)]
-pub struct Name(pub String, pub Option<Type>);
+pub struct Name(pub EcoString, pub Option<Type>);
 
-pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'static {
+pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a {
     const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>];
 
     fn get(tokens: &mut TokenIt<I>) -> Option<Self> {
@@ -40,7 +41,7 @@ pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'static {
 pub struct AST(pub Vec<Item>);
 
 #[inline(always)]
-pub fn parse<'a>(input: impl TokenItTrait + 'a) -> AST {
+pub fn parse<'a>(input: impl TokenItTrait) -> AST {
     let mut iterator = TokenIt(input.peekable());
     let mut items = Vec::new();
 
@@ -55,5 +56,3 @@ pub fn parse<'a>(input: impl TokenItTrait + 'a) -> AST {
 
     AST(items)
 }
-
-// before still reachable: 144,064 bytes in 2,292 blocks

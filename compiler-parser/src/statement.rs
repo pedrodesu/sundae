@@ -47,7 +47,7 @@ impl Statement {
 
             Some(Self::Return(
                 if tokens.0.peek()?.r#type != TokenType::Newline {
-                    Some(Expression::get(tokens)?) // needs Some(x)? to assert it gets a valid expression
+                    Some(Expression::get(tokens)?)
                 } else {
                     None
                 },

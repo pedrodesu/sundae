@@ -1,3 +1,5 @@
+use ecow::EcoString;
+
 const KEYWORDS: &[&str] = &["const", "func", "ret", "mut"];
 
 const OPERATORS: &[&str] = &[
@@ -45,7 +47,7 @@ pub enum TokenType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
-    pub value: String,
+    pub value: EcoString,
     pub r#type: TokenType,
 }
 

@@ -1,4 +1,5 @@
 use compiler_lexer::definitions::TokenType;
+use ecow::EcoString;
 use itertools::Itertools;
 
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct FunctionSignature {
-    pub name: (String, Option<Type>),
+    pub name: (EcoString, Option<Type>),
     pub arguments: Vec<ArgumentName>,
 }
 
@@ -97,9 +98,9 @@ impl Item {
         Some(Self::Function {
             signature: FunctionSignature {
                 name: (identifier, r#type),
-                arguments,
+                arguments: arguments.to_vec(),
             },
-            body,
+            body: body.to_vec(),
         })
     }
 }

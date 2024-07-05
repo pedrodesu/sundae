@@ -1,9 +1,10 @@
 #![feature(iter_next_chunk)]
 #![feature(let_chains)]
 
-use std::{fmt, iter::Peekable, mem, str::Chars};
+use std::{iter::Peekable, mem, str::Chars};
 
 use anyhow::{anyhow, Result};
+use ecow::EcoString;
 use itertools::Itertools;
 
 use self::definitions::*;
@@ -55,14 +56,14 @@ impl Iterator for Lexer<'_> {
             }));
         }
 
-        let mut acc = String::new();
+        let mut acc = EcoString::new();
 
         while let Some(c) = self.iterator.next() {
             acc.push(c);
 
             if let Some(t) = TokenType::eval(acc.as_str()) {
                 if let Some(&next) = self.iterator.peek() {
-                    let next_acc = acc.clone() + next.encode_utf8(&mut [0; 4]);
+                    let next_acc = format!("{}{}", acc, next);
                     let next_t = TokenType::eval(next_acc.as_str());
 
                     // if next_t.is_some() {
@@ -91,9 +92,8 @@ impl Iterator for Lexer<'_> {
 }
 
 #[inline(always)]
-pub fn tokenize(input: &str) -> Result<impl Iterator<Item = Token> + '_ + fmt::Debug + Clone> {
-    Ok(Lexer {
+pub fn tokenize(input: &str) -> impl Iterator<Item = Result<Token>> + Clone + '_ {
+    Lexer {
         iterator: input.chars().peekable(),
     }
-    .flatten())
 }

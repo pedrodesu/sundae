@@ -1,6 +1,6 @@
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold", "-Zshare-generics=y"]
-
 [build]
-rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-fuse-ld=mold", "-Zthreads=6"]
+rustflags = [
+    "-Ctarget-cpu=native",
+    "-Clink-arg=-fuse-ld=mold",
+    "-Zshare-generics=y",
+]

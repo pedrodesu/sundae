@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 
 use compiler_lexer::definitions::{Token, TokenType};
+use ecow::EcoString;
 use itertools::Itertools;
 
 use crate::{ExhaustiveGet, Statement};
@@ -19,11 +20,11 @@ impl<I: TokenItTrait> TokenIt<I> {
     }
 
     #[inline]
-    pub fn consume(&mut self, predicate: impl Fn(&Token) -> bool) -> Option<String> {
+    pub fn consume(&mut self, predicate: impl Fn(&Token) -> bool) -> Option<EcoString> {
         self.0.next_if(predicate).map(|t| t.value)
     }
 
-    pub fn parse_generic_list<T>(
+    pub fn parse_generic_list<T: Clone>(
         &mut self,
         left_bound: &str,
         right_bound: &str,

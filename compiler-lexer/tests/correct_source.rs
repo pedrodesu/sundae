@@ -17,8 +17,8 @@ const SOURCE: &str = r#"func function() {
 fn lexer_passes() {
     assert_eq!(
         compiler_lexer::tokenize(SOURCE)
-            .unwrap()
-            .collect::<Vec<_>>(),
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
         vec![
             Token {
                 value: "func".into(),
