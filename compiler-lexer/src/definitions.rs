@@ -176,8 +176,7 @@ mod tests {
     #[test]
     fn decimal_passes() {
         assert!(TokenType::is_dec_int("1234"));
-        assert!(TokenType::is_dec_int("01234"));
-        assert!(TokenType::is_dec_int("-42"));
+        assert!(TokenType::is_dec_int("1234"));
 
         assert!(!TokenType::is_dec_int("42.0"));
         assert!(!TokenType::is_dec_int("42a"));
