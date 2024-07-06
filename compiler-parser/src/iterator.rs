@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use crate::{ExhaustiveGet, Statement};
 
-pub trait TokenItTrait = Iterator<Item = Token> + Clone;
+pub trait TokenItTrait = Iterator<Item = Token> + Clone + std::fmt::Debug;
 
 #[derive(Clone)]
 pub struct TokenIt<I: TokenItTrait>(pub Peekable<I>);
@@ -24,10 +24,9 @@ impl<I: TokenItTrait> TokenIt<I> {
         self.0.next_if(predicate).map(|t| t.value)
     }
 
-    pub fn parse_generic_list<T: Clone>(
+    pub fn parse_generic_list<T>(
         &mut self,
-        left_bound: &str,
-        right_bound: &str,
+        (left_bound, right_bound): (&str, &str),
         predicate: impl Fn(&mut Self) -> Option<T>,
         sep_predicate: Option<&str>,
     ) -> Option<Vec<T>> {
@@ -59,6 +58,6 @@ impl<I: TokenItTrait> TokenIt<I> {
 
     #[inline]
     pub fn parse_block(&mut self) -> Option<Vec<Statement>> {
-        self.parse_generic_list("{", "}", |t| Statement::get(t), None)
+        self.parse_generic_list(("{", "}"), |t| Statement::get(t), None)
     }
 }

@@ -1,4 +1,6 @@
 #![feature(trait_alias)]
+#![feature(const_trait_impl)]
+#![feature(effects)]
 
 use std::fmt::Debug;
 
@@ -19,12 +21,14 @@ mod iterator;
 mod statement;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Type(pub Vec<EcoString>);
 
 #[derive(Debug, Clone)]
 pub struct ArgumentName(pub EcoString, pub Type);
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Name(pub EcoString, pub Option<Type>);
 
 pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a {

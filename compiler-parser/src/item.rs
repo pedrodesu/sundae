@@ -65,8 +65,7 @@ impl Item {
         let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
 
         let arguments = tokens.parse_generic_list(
-            "(",
-            ")",
+            ("(", ")"),
             |t| {
                 let identifier = t.consume(|t| t.r#type == TokenType::Identifier)?;
 

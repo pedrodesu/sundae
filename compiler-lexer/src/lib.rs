@@ -92,7 +92,7 @@ impl Iterator for Lexer<'_> {
 }
 
 #[inline(always)]
-pub fn tokenize(input: &str) -> impl Iterator<Item = Result<Token>> + Clone + '_ {
+pub fn tokenize(input: &str) -> impl Iterator<Item = Result<Token>> + Clone + std::fmt::Debug + '_ {
     Lexer {
         iterator: input.chars().peekable(),
     }

@@ -1,8 +1,34 @@
+use std::fmt;
+
 use compiler_lexer::definitions::Token;
 
 use crate::{iterator::TokenItTrait, ExhaustiveGet, TokenIt};
 
 use super::Expression;
+
+const OPERATOR_MAP: &[(&str, Operator)] = {
+    use Operator::*;
+
+    &[
+        ("+", Sum),
+        ("-", Sub),
+        ("*", Star),
+        ("/", Div),
+        ("and", And),
+        ("or", Or),
+        ("<", Lt),
+        (">", Gt),
+        ("<=", Le),
+        (">=", Ge),
+        ("==", EqEq),
+        ("!=", Neq),
+        ("<<", Shl),
+        (">>", Shr),
+        ("&", ShAnd),
+        ("|", ShOr),
+        ("^", Xor),
+    ]
+};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Operator {
@@ -46,32 +72,32 @@ impl TryFrom<&Token> for Operator {
 
     #[inline]
     fn try_from(token: &Token) -> Result<Self, Self::Error> {
-        use Operator::*;
+        OPERATOR_MAP
+            .iter()
+            .copied()
+            .find(|&(k, _)| k == token.value.as_str())
+            .map(|(_, v)| v)
+            .ok_or(())
+    }
+}
 
-        match token.value.as_str() {
-            "+" => Ok(Sum),
-            "-" => Ok(Sub),
-            "*" => Ok(Star),
-            "/" => Ok(Div),
-            "and" => Ok(And),
-            "or" => Ok(Or),
-            "<" => Ok(Lt),
-            ">" => Ok(Gt),
-            "<=" => Ok(Le),
-            ">=" => Ok(Ge),
-            "==" => Ok(EqEq),
-            "!=" => Ok(Neq),
-            "<<" => Ok(Shl),
-            ">>" => Ok(Shr),
-            "&" => Ok(ShAnd),
-            "|" => Ok(ShOr),
-            "^" => Ok(Xor),
-            _ => Err(()),
-        }
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            OPERATOR_MAP
+                .iter()
+                .copied()
+                .find(|&(_, v)| v == *self)
+                .map(|(k, _)| k)
+                .unwrap()
+        )
     }
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum BinaryNode {
     Scalar(Box<Expression>),
     Compound(Box<BinaryNode>, Operator, Box<BinaryNode>),
@@ -122,5 +148,109 @@ impl BinaryNode {
     #[inline]
     pub fn parse<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::consume(tokens)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use compiler_lexer::definitions::LiteralType;
+
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn simple_binary_passes() {
+        assert_eq!(
+            BinaryNode::parse(&mut TokenIt(
+                compiler_lexer::tokenize("9 + 10").flatten().peekable()
+            ))
+            .unwrap(),
+            BinaryNode::Compound(
+                Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                    value: "9".into(),
+                    r#type: LiteralType::Int
+                }))),
+                Operator::Sum,
+                Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                    value: "10".into(),
+                    r#type: LiteralType::Int
+                })))
+            )
+        );
+    }
+
+    #[test]
+    fn priority_binary_passes() {
+        assert_eq!(
+            BinaryNode::parse(&mut TokenIt(
+                compiler_lexer::tokenize("9 - 2 * 4 + 1")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            BinaryNode::Compound(
+                Box::new(BinaryNode::Compound(
+                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                        value: "9".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Sub,
+                    Box::new(BinaryNode::Compound(
+                        Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                            value: "2".into(),
+                            r#type: LiteralType::Int
+                        }))),
+                        Operator::Star,
+                        Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                            value: "4".into(),
+                            r#type: LiteralType::Int
+                        })))
+                    ))
+                )),
+                Operator::Sum,
+                Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                })))
+            )
+        );
+    }
+
+    #[test]
+    fn parenthesis_binary_passes() {
+        assert_eq!(
+            BinaryNode::parse(&mut TokenIt(
+                compiler_lexer::tokenize("9 - 2 * (4 + 1)")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            BinaryNode::Compound(
+                Box::new(BinaryNode::Compound(
+                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                        value: "9".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Sub,
+                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                )),
+                Operator::Star,
+                Box::new(BinaryNode::Compound(
+                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                        value: "4".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Star,
+                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                        value: "1".into(),
+                        r#type: LiteralType::Int
+                    })))
+                ))
+            )
+        );
     }
 }

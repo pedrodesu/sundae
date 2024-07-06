@@ -137,6 +137,7 @@ dependencies = [
  "compiler-lexer",
  "ecow",
  "itertools",
+ "pretty_assertions",
 ]
 
 [[package]]

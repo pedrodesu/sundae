@@ -16,7 +16,7 @@ struct Args {
     #[arg(short, long)]
     ir: bool,
 
-    /// Output file path
+    /// Output path
     #[arg(short, long)]
     output: Option<PathBuf>,
 

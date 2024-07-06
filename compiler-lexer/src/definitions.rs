@@ -45,7 +45,8 @@ pub enum TokenType {
     Newline,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Debug, Clone)]
+// #[cfg_attr(test, derive(PartialEq))] // TODO this errors on integration testing
 pub struct Token {
     pub value: EcoString,
     pub r#type: TokenType,
@@ -79,8 +80,7 @@ impl TokenType {
 
     #[inline]
     fn is_dec_int(expression: &str) -> bool {
-        expression.chars().all(|c| matches!(c, '0'..='9' | '-'))
-            && expression.match_indices('-').map(|v| v.0).sum::<usize>() == 0
+        expression.chars().all(|c| matches!(c, '0'..='9')) && !expression.starts_with('0')
     }
 
     #[inline]

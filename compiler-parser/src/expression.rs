@@ -1,13 +1,14 @@
 use compiler_lexer::definitions::{LiteralType, Token, TokenType};
 use ecow::EcoString;
 
-use crate::{iterator::TokenItTrait, statement::Statement, ExhaustiveGet, TokenIt};
+use crate::{iterator::TokenItTrait, statement::Statement, ExhaustiveGet, Operator, TokenIt};
 
 use self::binary::BinaryNode;
 
 pub mod binary;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Expression {
     Literal {
         value: EcoString,
@@ -15,6 +16,7 @@ pub enum Expression {
     },
     Path(Vec<EcoString>),
     Binary(BinaryNode),
+    Unary(Operator, Box<Expression>),
     Call {
         path: Vec<EcoString>,
         args: Vec<Expression>,
@@ -32,6 +34,7 @@ impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Expression {
         Self::parse_binary,
         Self::parse_literal,
         Self::parse_call,
+        Self::parse_unary,
         Self::parse_path,
     ];
 }
@@ -74,7 +77,7 @@ impl Expression {
             unreachable!()
         };
 
-        let args = tokens.parse_generic_list("(", ")", |t| Self::get(t), Some(","))?;
+        let args = tokens.parse_generic_list(("(", ")"), |t| Self::get(t), Some(","))?;
 
         Some(Self::Call { path, args })
     }
@@ -99,5 +102,14 @@ impl Expression {
             block,
             else_block: r#else,
         })
+    }
+
+    #[inline]
+    pub fn parse_unary<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
+        let operator =
+            Operator::try_from(&tokens.0.next_if(|t| t.r#type == TokenType::Operator)?).ok()?;
+        let expression = Expression::get(tokens)?;
+
+        Some(Self::Unary(operator, Box::new(expression)))
     }
 }

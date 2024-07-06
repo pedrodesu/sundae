@@ -4,6 +4,7 @@ use itertools::Itertools;
 use crate::{expression::Expression, iterator::TokenItTrait, ExhaustiveGet, Name, TokenIt, Type};
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Statement {
     Return(Option<Expression>),
     Expression(Expression),

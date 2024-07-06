@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use compiler_lexer::definitions::LiteralType;
-use compiler_parser::Expression;
+use compiler_parser::{Expression, Operator};
 use inkwell::values::{BasicValue, BasicValueEnum};
 
 use crate::{Codegen, Function, Type, Value};
@@ -128,6 +128,30 @@ impl<'ctx> Codegen<'ctx> {
                 }
             }
             Expression::Binary(n) => Some(self.gen_binary(parent_func, n)?),
+            Expression::Unary(op, box e) => {
+                let value =
+                    self.gen_non_void_expression(Some(&Rc::clone(parent_func.unwrap())), e)?;
+
+                if op == Operator::Sub && value.inner.is_int_value() {
+                    Some(Value {
+                        r#type: value.r#type,
+                        inner: self
+                            .builder
+                            .build_int_neg(value.inner.into_int_value(), "neg")?
+                            .into(),
+                    })
+                } else if op == Operator::Sub && value.inner.is_float_value() {
+                    Some(Value {
+                        r#type: value.r#type,
+                        inner: self
+                            .builder
+                            .build_float_neg(value.inner.into_float_value(), "neg")?
+                            .into(),
+                    })
+                } else {
+                    bail!("Leading `{op}` not supported here")
+                }
+            }
             Expression::Call { path, args } => {
                 let name = path.last().unwrap();
 

@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'compiler-driver'",
+            "name": "Debug executable 'sundae'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=compiler-driver",
-                    "--package=compiler-driver"
+                    "--bin=sundae",
+                    "--package=sundae"
                 ],
                 "filter": {
-                    "name": "compiler-driver",
+                    "name": "sundae",
                     "kind": "bin"
                 }
             },
@@ -27,16 +27,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'compiler-driver'",
+            "name": "Debug unit tests in executable 'sundae'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=compiler-driver",
-                    "--package=compiler-driver"
+                    "--bin=sundae",
+                    "--package=sundae"
                 ],
                 "filter": {
-                    "name": "compiler-driver",
+                    "name": "sundae",
                     "kind": "bin"
                 }
             },

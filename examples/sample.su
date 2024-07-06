@@ -8,9 +8,9 @@ const MAGIC_NUMBER i32 = 42
 
 func op(a i32, b i32) i32 {
     if
-        a > b
+        a < b
         {
-        ret a * b // TODO -a * b
+        ret -a * b
     } else {
         ret 4 * 2 + a + b * 2 // TODO (a + b) * 2
     }

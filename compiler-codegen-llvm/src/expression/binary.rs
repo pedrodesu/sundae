@@ -2,28 +2,11 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 use compiler_parser::{BinaryNode, Operator};
-use inkwell::{
-    values::{BasicValue, IntValue},
-    IntPredicate,
-};
+use inkwell::{values::BasicValue, IntPredicate};
 
 use crate::{Codegen, Function, Type, Value};
 
 impl<'ctx> Codegen<'ctx> {
-    fn eval_side(
-        &self,
-        parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
-        node: BinaryNode,
-    ) -> Result<IntValue<'ctx>> {
-        Ok(match node {
-            BinaryNode::Scalar(box node) => self.gen_non_void_expression(parent_func, node)?,
-            node @ BinaryNode::Compound(..) => self.gen_binary(parent_func, node)?,
-        }
-        .inner
-        .into_int_value())
-        // TODO ^ gotta do checking before, as on other places
-    }
-
     pub fn gen_binary(
         &self,
         parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
@@ -33,8 +16,23 @@ impl<'ctx> Codegen<'ctx> {
             unreachable!()
         };
 
-        let l = self.eval_side(Some(&Rc::clone(parent_func.unwrap())), l)?;
-        let r = self.eval_side(parent_func, r)?;
+        let eval_side = |parent_func, node| {
+            anyhow::Ok(
+                match node {
+                    BinaryNode::Scalar(box node) => {
+                        self.gen_non_void_expression(parent_func, node)?
+                    }
+                    node @ BinaryNode::Compound(..) => self.gen_binary(parent_func, node)?,
+                }
+                .inner
+                .into_int_value(),
+            )
+            // TODO ^ gotta do checking before, as on other places
+        };
+
+        let binding = Rc::clone(parent_func.unwrap());
+        let l = eval_side(Some(&binding), l)?;
+        let r = eval_side(parent_func, r)?;
 
         // TODO check for and generate according instructions for fp operands
         // same thing for signed and unsigned predicate types
