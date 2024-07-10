@@ -1,0 +1,4 @@
+func op(a i32, b i32) i32 {
+    val a = 9 - 2
+    val b = -(-42 + 2)
+}

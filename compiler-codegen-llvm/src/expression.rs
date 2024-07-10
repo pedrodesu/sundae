@@ -132,7 +132,7 @@ impl<'ctx> Codegen<'ctx> {
                 let value =
                     self.gen_non_void_expression(Some(&Rc::clone(parent_func.unwrap())), e)?;
 
-                if op == Operator::Sub && value.inner.is_int_value() {
+                if op == Operator::Minus && value.inner.is_int_value() {
                     Some(Value {
                         r#type: value.r#type,
                         inner: self
@@ -140,7 +140,7 @@ impl<'ctx> Codegen<'ctx> {
                             .build_int_neg(value.inner.into_int_value(), "neg")?
                             .into(),
                     })
-                } else if op == Operator::Sub && value.inner.is_float_value() {
+                } else if op == Operator::Minus && value.inner.is_float_value() {
                     Some(Value {
                         r#type: value.r#type,
                         inner: self
@@ -149,7 +149,7 @@ impl<'ctx> Codegen<'ctx> {
                             .into(),
                     })
                 } else {
-                    bail!("Leading `{op}` not supported here")
+                    unreachable!()
                 }
             }
             Expression::Call { path, args } => {

@@ -1,30 +1,18 @@
 use ecow::EcoString;
 
-const KEYWORDS: &[&str] = &["const", "func", "ret", "mut"];
+const KEYWORDS: &[&str] = &["const", "func", "ret", "if", "mut", "val"];
 
 const OPERATORS: &[&str] = &[
-    "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=", "<", ">", "<=", ">=", "=", "==", "!",
-    "!=", "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=", "|=", "^=", ":=",
+    "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=", "<", ">", "<=", ">=", "==", "!", "!=",
+    "<<", ">>", "<<=", ">>=", "&", "|", "^", "&=", "|=", "^=",
 ];
 
-const SEPARATORS: &[&str] = &["(", ")", "[", "]", "{", "}", ",", "."];
+const SEPARATORS: &[&str] = &["=", "(", ")", "[", "]", "{", "}", ",", "."];
 
 pub const STR_DELIM: char = '"';
 pub const RUNE_DELIM: char = '`';
 pub const COMMENT_PREFIX: &str = "//";
 pub const COMMENT_PREFIX_LEN: usize = COMMENT_PREFIX.len();
-
-#[inline]
-pub(super) fn allow_type_transmutation(
-    (_, curr_type): (&str, TokenType),
-    (next, next_type): (&str, Option<TokenType>),
-) -> bool {
-    (curr_type == TokenType::Identifier && matches!(next_type, Some(TokenType::Keyword)))
-        || (curr_type == TokenType::Keyword && matches!(next_type, Some(TokenType::Identifier)))
-        || (curr_type == TokenType::Literal(LiteralType::Int)
-            && matches!(next_type, Some(TokenType::Literal(LiteralType::Float))))
-        || matches!(next, "0x" | "0o" | "0b")
-}
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum LiteralType {
@@ -46,7 +34,6 @@ pub enum TokenType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-// #[cfg_attr(test, derive(PartialEq))] // TODO this errors on integration testing
 pub struct Token {
     pub value: EcoString,
     pub r#type: TokenType,

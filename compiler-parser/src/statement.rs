@@ -3,8 +3,7 @@ use itertools::Itertools;
 
 use crate::{expression::Expression, iterator::TokenItTrait, ExhaustiveGet, Name, TokenIt, Type};
 
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Return(Option<Expression>),
     Expression(Expression),
@@ -22,9 +21,9 @@ pub enum Statement {
 impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Statement {
     const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] = &[
         Self::parse_return,
-        Self::parse_expression,
         Self::parse_assign,
         Self::parse_local,
+        Self::parse_expression,
     ];
 }
 
@@ -32,11 +31,11 @@ impl Statement {
     #[inline]
     fn assert_end<I: TokenItTrait>(
         tokens: &mut TokenIt<I>,
-        predicate: impl Fn(&mut TokenIt<I>) -> Option<Self>,
+        predicate: impl FnOnce(&mut TokenIt<I>) -> Option<Self>,
     ) -> Option<Self> {
         let value = predicate(tokens)?;
 
-        tokens.consume(|t| t.r#type == TokenType::Newline)?;
+        tokens.next(|t| t.r#type == TokenType::Newline)?;
 
         Some(value)
     }
@@ -44,7 +43,7 @@ impl Statement {
     #[inline]
     pub fn parse_return<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::assert_end(tokens, |tokens| {
-            tokens.consume(|t| t.value == "ret")?;
+            tokens.next(|t| t.value == "ret")?;
 
             Some(Self::Return(
                 if tokens.0.peek()?.r#type != TokenType::Newline {
@@ -67,7 +66,7 @@ impl Statement {
         Self::assert_end(tokens, |tokens| {
             let destination = Expression::get(tokens)?;
 
-            tokens.consume(|t| t.value == "=")?;
+            tokens.next(|t| t.value == "=")?;
 
             let source = Expression::get(tokens)?;
 
@@ -80,15 +79,17 @@ impl Statement {
 
     pub fn parse_local<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         Self::assert_end(tokens, |tokens| {
-            let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
+            tokens.next(|t| t.value == "val")?;
 
-            let mutable = tokens.consume(|t| t.value == "mut").is_some();
+            let identifier = tokens.next(|t| t.r#type == TokenType::Identifier)?.value;
 
-            let r#type = if tokens.0.peek()?.value != ":=" {
+            let mutable = tokens.next(|t| t.value == "mut").is_some();
+
+            let r#type = if tokens.0.peek()?.value != "=" {
                 Some(Type(
                     tokens
                         .0
-                        .peeking_take_while(|t| t.value != ":=" && t.r#type != TokenType::Newline)
+                        .peeking_take_while(|t| t.value != "=" && t.r#type != TokenType::Newline)
                         .map(|t| t.value)
                         .collect(),
                 ))
@@ -97,7 +98,7 @@ impl Statement {
             };
 
             let init = tokens
-                .consume(|t| t.value == ":=")
+                .next(|t| t.value == "=")
                 .and_then(|_| Expression::get(tokens));
 
             Some(Self::Local {

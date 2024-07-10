@@ -32,11 +32,11 @@ impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Item {
 
 impl Item {
     pub fn parse_const<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        tokens.consume(|t| t.value == "const")?;
+        tokens.next(|t| t.value == "const")?;
 
-        let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
+        let identifier = tokens.next(|t| t.r#type == TokenType::Identifier)?.value;
 
-        let r#type = if tokens.consume(|t| t.value == "=").is_none() {
+        let r#type = if tokens.next(|t| t.value == "=").is_none() {
             Some(Type(
                 tokens
                     .0
@@ -51,7 +51,7 @@ impl Item {
 
         let value = Expression::get(tokens)?;
 
-        tokens.consume(|t| t.r#type == TokenType::Newline)?;
+        tokens.next(|t| t.r#type == TokenType::Newline)?;
 
         Some(Self::Const {
             name: Name(identifier, r#type),
@@ -60,14 +60,14 @@ impl Item {
     }
 
     pub fn parse_function<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        tokens.consume(|t| t.value == "func")?;
+        tokens.next(|t| t.value == "func")?;
 
-        let identifier = tokens.consume(|t| t.r#type == TokenType::Identifier)?;
+        let identifier = tokens.next(|t| t.r#type == TokenType::Identifier)?.value;
 
         let arguments = tokens.parse_generic_list(
             ("(", ")"),
             |t| {
-                let identifier = t.consume(|t| t.r#type == TokenType::Identifier)?;
+                let identifier = t.next(|t| t.r#type == TokenType::Identifier)?.value;
 
                 let r#type = Type(
                     t.0.peeking_take_while(|t| t.value != "," && t.value != ")")
@@ -97,9 +97,9 @@ impl Item {
         Some(Self::Function {
             signature: FunctionSignature {
                 name: (identifier, r#type),
-                arguments: arguments.to_vec(),
+                arguments,
             },
-            body: body.to_vec(),
+            body,
         })
     }
 }

@@ -3,4 +3,5 @@ rustflags = [
     "-Ctarget-cpu=native",
     "-Clink-arg=-fuse-ld=mold",
     "-Zshare-generics=y",
+    "-Znext-solver",
 ]

@@ -47,11 +47,7 @@ fn main() -> Result<()> {
 
     tokens
         .clone()
-        .try_for_each(|e| {
-            e?;
-
-            anyhow::Ok(())
-        })
+        .try_for_each(|e| e.map(|_| ()))
         .context("Lexer failed")?;
 
     // tokens.clone().for_each(|t| println!("{:?}", t));
@@ -62,9 +58,9 @@ fn main() -> Result<()> {
             .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment),
     );
 
-    // println!("{ast:#?}");
+    println!("{ast:#?}");
 
-    compiler_codegen_llvm::gen(module, ast, ir, output)?;
+    //compiler_codegen_llvm::gen(module, ast, ir, output)?;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 func swap(a &mut i32, b &mut i32) {
-    c i32 := a
-    a = b
+    val c i32 = a
+    a = b + 4
     b = c
 }
 
@@ -10,15 +10,15 @@ func op(a i32, b i32) i32 {
     if
         a < b
         {
-        ret -a * b
+        ret -a * b // -a giving out problems
     } else {
-        ret 4 * 2 + a + b * 2 // TODO (a + b) * 2
+        ret (a + b) * 2
     }
 }
 
 func main() {
-    a i32 := op(4, 10)
-    b i32
+    val a i32 = op(4, 10)
+    val b i32
     
     b = MAGIC_NUMBER
 
@@ -27,3 +27,4 @@ func main() {
     putd(a)
     putd(b)
 }
+

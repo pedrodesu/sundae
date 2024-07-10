@@ -1,153 +1,139 @@
-use std::fmt;
+use std::collections::VecDeque;
 
-use compiler_lexer::definitions::Token;
+use compiler_lexer::definitions::TokenType;
 
 use crate::{iterator::TokenItTrait, ExhaustiveGet, TokenIt};
 
-use super::Expression;
-
-const OPERATOR_MAP: &[(&str, Operator)] = {
-    use Operator::*;
-
-    &[
-        ("+", Sum),
-        ("-", Sub),
-        ("*", Star),
-        ("/", Div),
-        ("and", And),
-        ("or", Or),
-        ("<", Lt),
-        (">", Gt),
-        ("<=", Le),
-        (">=", Ge),
-        ("==", EqEq),
-        ("!=", Neq),
-        ("<<", Shl),
-        (">>", Shr),
-        ("&", ShAnd),
-        ("|", ShOr),
-        ("^", Xor),
-    ]
+use super::{
+    operator::{to_operator, Operator},
+    Expression,
 };
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Operator {
-    Sum,
-    Sub,
-    Star,
-    Div,
-    And,
-    Or,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-    EqEq,
-    Neq,
-    Shl,
-    Shr,
-    ShAnd,
-    ShOr,
-    Xor,
+const OPERATOR_PRIORITY: &[&[Operator]] = {
+    use Operator::*;
+
+    &[&[Plus, Minus], &[Star, Div]]
+};
+
+// TODO const priority() when Option::unwrap_or is const
+#[inline]
+fn priority(operator: Operator) -> usize {
+    OPERATOR_PRIORITY
+        .into_iter()
+        .copied()
+        .position(|v| v.contains(&operator))
+        .map(|v| v + 1)
+        // Custom operators are of the least priority, as they should be evaluated last, after every mathematical operator
+        .unwrap_or_default()
 }
 
-impl Operator {
-    const TERMS: &'static [Self] = {
-        use Operator::*;
-
-        &[
-            Sum, Sub, And, Or, Lt, Gt, Le, Ge, EqEq, Neq, Shl, Shr, ShAnd, ShOr, Xor,
-        ]
-    };
-
-    const FACTORS: &'static [Self] = {
-        use Operator::*;
-
-        &[Star, Div]
-    };
-}
-
-impl TryFrom<&Token> for Operator {
-    type Error = ();
-
-    #[inline]
-    fn try_from(token: &Token) -> Result<Self, Self::Error> {
-        OPERATOR_MAP
-            .iter()
-            .copied()
-            .find(|&(k, _)| k == token.value.as_str())
-            .map(|(_, v)| v)
-            .ok_or(())
-    }
-}
-
-impl fmt::Display for Operator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            OPERATOR_MAP
-                .iter()
-                .copied()
-                .find(|&(_, v)| v == *self)
-                .map(|(k, _)| k)
-                .unwrap()
-        )
-    }
-}
-
-#[derive(Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum BinaryNode {
+#[derive(Clone, Debug, PartialEq)]
+pub enum Node {
     Scalar(Box<Expression>),
-    Compound(Box<BinaryNode>, Operator, Box<BinaryNode>),
+    Compound(Box<Node>, Operator, Box<Node>),
 }
 
-impl BinaryNode {
-    fn term<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        Some(Self::Scalar(Box::new(
-            Expression::PARSE_OPTIONS
+#[derive(Debug, PartialEq, Clone)]
+enum RPNItem {
+    Scalar(Expression),
+    Operator(Operator),
+    LParenthesis,
+}
+
+impl Node {
+    // TODO this function looks kinda terrible rn but works for every use case, refactor
+    fn to_reverse_polish<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Vec<RPNItem>> {
+        let mut output = Vec::new();
+        let mut operators = VecDeque::new();
+
+        // TODO hacky, refactor this later
+        let mut last_was_scalar = false;
+
+        // TODO cloning here is stupid but seems necessary because rust ownership + dumb peek is &mut
+        while let Some(t) = tokens.0.clone().peek() {
+            if let Some(e_predicate) = Expression::PARSE_OPTIONS
                 .iter()
-                .filter(|&&f| f != Expression::parse_binary)
-                .find(|&&f| f(&mut tokens.clone()).is_some())?(tokens)
-            .unwrap(),
-        )))
-    }
-
-    fn factor<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        let mut acc = Self::term(tokens)?;
-        while let Some(t) = tokens.0.next_if(|t| {
-            Operator::try_from(t)
-                .ok()
-                .is_some_and(|op| Operator::FACTORS.contains(&op))
-        }) {
-            let next = Self::term(tokens)?;
-            acc = Self::Compound(Box::new(acc), Operator::try_from(&t).ok()?, Box::new(next));
+                .filter(|&&f| {
+                    // We cannot allow getting another binary immediately inside binary expression because then we would do it infinitely and get an overflow
+                    // We only allow unary if we already have an operator, else "unary's operator" is actually a binary expression operator
+                    if last_was_scalar {
+                        f != Expression::parse_binary && f != Expression::parse_unary
+                    } else {
+                        f != Expression::parse_binary
+                    }
+                })
+                .find(|&&f| f(&mut tokens.clone()).is_some())
+            {
+                if last_was_scalar {
+                    return None;
+                }
+                output.push(RPNItem::Scalar(e_predicate(tokens).unwrap()));
+                last_was_scalar = true;
+                continue;
+            } else if t.r#type == TokenType::Operator {
+                if !last_was_scalar {
+                    return None;
+                }
+                let op = to_operator(&t);
+                while let Some(RPNItem::Operator(prev_op)) = operators.front()
+                    && (priority(op) <= priority(*prev_op))
+                {
+                    output.push(operators.pop_front().unwrap());
+                }
+                operators.push_front(RPNItem::Operator(op));
+                last_was_scalar = false;
+            } else if t.value == "(" {
+                operators.push_front(RPNItem::LParenthesis);
+            } else if t.value == ")" {
+                if !operators.contains(&RPNItem::LParenthesis) {
+                    return None;
+                }
+                while let Some(op) = operators.pop_front() {
+                    if matches!(op, RPNItem::LParenthesis) {
+                        break;
+                    }
+                    output.push(op);
+                }
+            } else {
+                break;
+            }
+            // We should consume this token always, except when getting a generic expression, as it already consumes it
+            tokens.0.next();
         }
-        Some(acc)
-    }
 
-    fn consume<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        let mut acc = Self::factor(tokens)?;
-        // TODO manage whitespace between binary (and multiple other instances, such as assign)
-        while let Some(t) = tokens.0.next_if(|t| {
-            Operator::try_from(t)
-                .ok()
-                .is_some_and(|op| Operator::TERMS.contains(&op))
-        }) {
-            let next = Self::factor(tokens)?;
-            acc = Self::Compound(Box::new(acc), Operator::try_from(&t).ok()?, Box::new(next));
-        }
-        if let Self::Compound(..) = acc {
-            Some(acc)
+        output.extend(operators);
+
+        if !output.is_empty() {
+            Some(output)
         } else {
             None
         }
     }
 
     #[inline]
+    fn consume(it: &mut impl Iterator<Item = RPNItem>) -> Self {
+        match it.next() {
+            Some(RPNItem::Operator(op)) => {
+                let rhs = Self::consume(it);
+                let lhs = Self::consume(it);
+
+                Node::Compound(Box::new(lhs), op, Box::new(rhs))
+            }
+            Some(RPNItem::Scalar(e)) => Node::Scalar(Box::new(e)),
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
     pub fn parse<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        Self::consume(tokens)
+        let rpn = Self::to_reverse_polish(tokens)?;
+
+        let res = Self::consume(&mut rpn.into_iter().rev());
+        if !matches!(res, Self::Scalar(_)) {
+            Some(res)
+        } else {
+            None
+        }
     }
 }
 
@@ -162,17 +148,17 @@ mod tests {
     #[test]
     fn simple_binary_passes() {
         assert_eq!(
-            BinaryNode::parse(&mut TokenIt(
+            Node::parse(&mut TokenIt(
                 compiler_lexer::tokenize("9 + 10").flatten().peekable()
             ))
             .unwrap(),
-            BinaryNode::Compound(
-                Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+            Node::Compound(
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
                     value: "9".into(),
                     r#type: LiteralType::Int
                 }))),
-                Operator::Sum,
-                Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                Operator::Plus,
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
                     value: "10".into(),
                     r#type: LiteralType::Int
                 })))
@@ -181,38 +167,99 @@ mod tests {
     }
 
     #[test]
+    fn hacky_binary_with_unary_passes() {
+        assert_eq!(
+            Node::parse(&mut TokenIt(
+                compiler_lexer::tokenize("10 - -1").flatten().peekable()
+            ))
+            .unwrap(),
+            Node::Compound(
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    value: "10".into(),
+                    r#type: LiteralType::Int
+                }))),
+                Operator::Minus,
+                Box::new(Node::Scalar(Box::new(Expression::Unary(
+                    Operator::Minus,
+                    Box::new(Expression::Literal {
+                        value: "1".into(),
+                        r#type: LiteralType::Int
+                    })
+                ))))
+            )
+        );
+    }
+
+    #[test]
     fn priority_binary_passes() {
         assert_eq!(
-            BinaryNode::parse(&mut TokenIt(
+            Node::parse(&mut TokenIt(
                 compiler_lexer::tokenize("9 - 2 * 4 + 1")
                     .flatten()
                     .peekable()
             ))
             .unwrap(),
-            BinaryNode::Compound(
-                Box::new(BinaryNode::Compound(
-                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+            Node::Compound(
+                Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
                         value: "9".into(),
                         r#type: LiteralType::Int
                     }))),
-                    Operator::Sub,
-                    Box::new(BinaryNode::Compound(
-                        Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                    Operator::Minus,
+                    Box::new(Node::Compound(
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
                             value: "2".into(),
                             r#type: LiteralType::Int
                         }))),
                         Operator::Star,
-                        Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
                             value: "4".into(),
                             r#type: LiteralType::Int
                         })))
                     ))
                 )),
-                Operator::Sum,
-                Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+                Operator::Plus,
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
                     value: "1".into(),
                     r#type: LiteralType::Int
-                })))
+                }))),
+            )
+        );
+    }
+
+    #[test]
+    fn custom_priority_binary_passes() {
+        assert_eq!(
+            Node::parse(&mut TokenIt(
+                compiler_lexer::tokenize("9 - 2 * 4 >> 1")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Node::Compound(
+                Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "9".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Minus,
+                    Box::new(Node::Compound(
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                            value: "2".into(),
+                            r#type: LiteralType::Int
+                        }))),
+                        Operator::Star,
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                            value: "4".into(),
+                            r#type: LiteralType::Int
+                        })))
+                    )),
+                )),
+                Operator::Shr,
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                }))),
             )
         );
     }
@@ -220,37 +267,110 @@ mod tests {
     #[test]
     fn parenthesis_binary_passes() {
         assert_eq!(
-            BinaryNode::parse(&mut TokenIt(
+            Node::parse(&mut TokenIt(
+                compiler_lexer::tokenize("(4 + 1)").flatten().peekable()
+            ))
+            .unwrap(),
+            Node::Compound(
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    value: "4".into(),
+                    r#type: LiteralType::Int
+                }))),
+                Operator::Plus,
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                })))
+            )
+        );
+
+        assert_eq!(
+            Node::parse(&mut TokenIt(
                 compiler_lexer::tokenize("9 - 2 * (4 + 1)")
                     .flatten()
                     .peekable()
             ))
             .unwrap(),
-            BinaryNode::Compound(
-                Box::new(BinaryNode::Compound(
-                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
-                        value: "9".into(),
-                        r#type: LiteralType::Int
-                    }))),
-                    Operator::Sub,
-                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
+            Node::Compound(
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    value: "9".into(),
+                    r#type: LiteralType::Int
+                }))),
+                Operator::Minus,
+                Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
                     }))),
-                )),
-                Operator::Star,
-                Box::new(BinaryNode::Compound(
-                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
-                        value: "4".into(),
-                        r#type: LiteralType::Int
-                    }))),
                     Operator::Star,
-                    Box::new(BinaryNode::Scalar(Box::new(Expression::Literal {
-                        value: "1".into(),
-                        r#type: LiteralType::Int
-                    })))
+                    Box::new(Node::Compound(
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                            value: "4".into(),
+                            r#type: LiteralType::Int
+                        }))),
+                        Operator::Plus,
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                            value: "1".into(),
+                            r#type: LiteralType::Int
+                        })))
+                    ))
                 ))
             )
         );
+    }
+
+    #[test]
+    fn binary_with_call_passes() {
+        assert_eq!(
+            Node::parse(&mut TokenIt(
+                compiler_lexer::tokenize("9 << 2 * (add(2, 4) + 1)")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Node::Compound(
+                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    value: "9".into(),
+                    r#type: LiteralType::Int
+                }))),
+                Operator::Shl,
+                Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Star,
+                    Box::new(Node::Compound(
+                        Box::new(Node::Scalar(Box::new(Expression::Call {
+                            path: vec!["add".into()],
+                            args: vec![
+                                Expression::Literal {
+                                    value: "2".into(),
+                                    r#type: LiteralType::Int
+                                },
+                                Expression::Literal {
+                                    value: "4".into(),
+                                    r#type: LiteralType::Int
+                                }
+                            ]
+                        }))),
+                        Operator::Plus,
+                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                            value: "1".into(),
+                            r#type: LiteralType::Int
+                        })))
+                    ))
+                ))
+            )
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_binary_passes() {
+        Node::parse(&mut TokenIt(
+            compiler_lexer::tokenize("2 + 4 2").flatten().peekable(),
+        ))
+        .unwrap();
     }
 }

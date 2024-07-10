@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
-use compiler_parser::{BinaryNode, Operator};
+use compiler_parser::{Node, Operator};
 use inkwell::{values::BasicValue, IntPredicate};
 
 use crate::{Codegen, Function, Type, Value};
@@ -10,19 +10,17 @@ impl<'ctx> Codegen<'ctx> {
     pub fn gen_binary(
         &self,
         parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
-        node: BinaryNode,
+        node: Node,
     ) -> Result<Value<'ctx>> {
-        let BinaryNode::Compound(box l, op, box r) = node else {
+        let Node::Compound(box l, op, box r) = node else {
             unreachable!()
         };
 
         let eval_side = |parent_func, node| {
             anyhow::Ok(
                 match node {
-                    BinaryNode::Scalar(box node) => {
-                        self.gen_non_void_expression(parent_func, node)?
-                    }
-                    node @ BinaryNode::Compound(..) => self.gen_binary(parent_func, node)?,
+                    Node::Scalar(box node) => self.gen_non_void_expression(parent_func, node)?,
+                    node @ Node::Compound(..) => self.gen_binary(parent_func, node)?,
                 }
                 .inner
                 .into_int_value(),
@@ -40,8 +38,8 @@ impl<'ctx> Codegen<'ctx> {
         // TODO read abt difference on E/U abt NaN
 
         let value = match op {
-            Operator::Sum => self.builder.build_int_add(l, r, "sum"),
-            Operator::Sub => self.builder.build_int_sub(l, r, "sub"),
+            Operator::Plus => self.builder.build_int_add(l, r, "sum"),
+            Operator::Minus => self.builder.build_int_sub(l, r, "sub"),
             Operator::Star => self.builder.build_int_mul(l, r, "mul"),
             Operator::Div => self.builder.build_int_signed_div(l, r, "div"),
             // LLVM doesn't implement && or ||, rather they work like & and | to bools (i1)

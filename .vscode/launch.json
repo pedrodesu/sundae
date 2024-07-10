@@ -20,7 +20,7 @@
                 }
             },
             "args": [
-                "examples/sample.su"
+                "examples/test.su"
             ],
             "cwd": "${workspaceFolder}"
         },
