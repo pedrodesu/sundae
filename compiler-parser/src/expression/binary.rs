@@ -46,11 +46,9 @@ impl Node {
         let mut output = Vec::new();
         let mut operators = VecDeque::new();
 
-        // TODO hacky, refactor this later
         let mut last_was_scalar = false;
 
-        // TODO cloning here is stupid but seems necessary because rust ownership + dumb peek is &mut
-        while let Some(t) = tokens.0.clone().peek() {
+        while tokens.0.peek().is_some() {
             if let Some(e_predicate) = Expression::PARSE_OPTIONS
                 .iter()
                 .filter(|&&f| {
@@ -69,36 +67,41 @@ impl Node {
                 }
                 output.push(RPNItem::Scalar(e_predicate(tokens).unwrap()));
                 last_was_scalar = true;
-                continue;
-            } else if t.r#type == TokenType::Operator {
-                if !last_was_scalar {
-                    return None;
-                }
-                let op = to_operator(&t);
-                while let Some(RPNItem::Operator(prev_op)) = operators.front()
-                    && (priority(op) <= priority(*prev_op))
-                {
-                    output.push(operators.pop_front().unwrap());
-                }
-                operators.push_front(RPNItem::Operator(op));
-                last_was_scalar = false;
-            } else if t.value == "(" {
-                operators.push_front(RPNItem::LParenthesis);
-            } else if t.value == ")" {
-                if !operators.contains(&RPNItem::LParenthesis) {
-                    return None;
-                }
-                while let Some(op) = operators.pop_front() {
-                    if matches!(op, RPNItem::LParenthesis) {
-                        break;
-                    }
-                    output.push(op);
-                }
             } else {
-                break;
+                let Some(t) = tokens.0.next_if(|t| {
+                    t.r#type == TokenType::Operator || t.value == "(" || t.value == ")"
+                }) else {
+                    break;
+                };
+
+                if t.r#type == TokenType::Operator {
+                    if !last_was_scalar {
+                        return None;
+                    }
+                    let op = to_operator(&t);
+                    while let Some(RPNItem::Operator(prev_op)) = operators.front()
+                        && (priority(op) <= priority(*prev_op))
+                    {
+                        output.push(operators.pop_front().unwrap());
+                    }
+                    operators.push_front(RPNItem::Operator(op));
+                    last_was_scalar = false;
+                } else if t.value == "(" {
+                    operators.push_front(RPNItem::LParenthesis);
+                } else if t.value == ")" {
+                    if !operators.contains(&RPNItem::LParenthesis) {
+                        return None;
+                    }
+                    while let Some(op) = operators.pop_front() {
+                        if matches!(op, RPNItem::LParenthesis) {
+                            break;
+                        }
+                        output.push(op);
+                    }
+                } else {
+                    unreachable!()
+                }
             }
-            // We should consume this token always, except when getting a generic expression, as it already consumes it
-            tokens.0.next();
         }
 
         output.extend(operators);

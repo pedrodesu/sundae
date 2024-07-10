@@ -1,13 +1,13 @@
+use anyhow::{bail, Context, Result};
+use clap::Parser;
+use mimalloc::MiMalloc;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context, Result};
-use clap::Parser;
-
 #[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(clap::Parser)]
 #[command(version, about)]
