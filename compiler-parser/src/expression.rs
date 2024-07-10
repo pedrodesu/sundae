@@ -86,7 +86,7 @@ impl Expression {
 
         tokens.ignore_newlines();
 
-        let condition = Self::get(tokens)?;
+        let condition = Expression::get(tokens)?;
 
         let block = tokens.parse_block()?;
 
@@ -128,4 +128,123 @@ impl Expression {
     }
 }
 
-// TODO impl remaining tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use pretty_assertions::assert_eq;
+
+    // Expression::Literal and Expression::Binary are mere simple wrappers for already tested features, so we don't test them here
+
+    #[test]
+    fn path_passes() {
+        assert_eq!(
+            Expression::parse_path(&mut TokenIt(
+                compiler_lexer::tokenize("a.path.to").flatten().peekable()
+            ))
+            .unwrap(),
+            Expression::Path(vec!["a".into(), "path".into(), "to".into()])
+        );
+    }
+
+    #[test]
+    fn call_passes() {
+        assert_eq!(
+            Expression::parse_call(&mut TokenIt(
+                compiler_lexer::tokenize("call_me(     )")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Expression::Call {
+                path: vec!["call_me".into()],
+                args: vec![]
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_call(&mut TokenIt(
+                compiler_lexer::tokenize("call  .me()").flatten().peekable()
+            ))
+            .unwrap(),
+            Expression::Call {
+                path: vec!["call".into(), "me".into()],
+                args: vec![]
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_call(&mut TokenIt(
+                compiler_lexer::tokenize("fn    (2)").flatten().peekable()
+            ))
+            .unwrap(),
+            Expression::Call {
+                path: vec!["fn".into()],
+                args: vec![Expression::Literal {
+                    value: "2".into(),
+                    r#type: LiteralType::Int
+                }]
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_call(&mut TokenIt(
+                compiler_lexer::tokenize("fn. path(\n\n\n420,`j`\n\n ,\n6\n)")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Expression::Call {
+                path: vec!["fn".into(), "path".into()],
+                args: vec![
+                    Expression::Literal {
+                        value: "420".into(),
+                        r#type: LiteralType::Int
+                    },
+                    Expression::Literal {
+                        value: "`j`".into(),
+                        r#type: LiteralType::Rune
+                    },
+                    Expression::Literal {
+                        value: "6".into(),
+                        r#type: LiteralType::Int
+                    }
+                ]
+            }
+        );
+
+        assert!(Expression::parse_call(&mut TokenIt(
+            compiler_lexer::tokenize("fn.()").flatten().peekable()
+        ))
+        .is_none());
+
+        assert!(Expression::parse_call(&mut TokenIt(
+            compiler_lexer::tokenize("fn(42, )").flatten().peekable()
+        ))
+        .is_none());
+
+        assert!(Expression::parse_call(&mut TokenIt(
+            compiler_lexer::tokenize("fn(, 42)").flatten().peekable()
+        ))
+        .is_none());
+    }
+
+    // TODO impl if and unary extensive tests
+    #[test]
+    fn if_passes() {
+        assert_eq!(
+            Expression::parse_if(&mut TokenIt(
+                compiler_lexer::tokenize("if 1 {}").flatten().peekable()
+            ))
+            .unwrap(),
+            Expression::If {
+                condition: Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                }),
+                block: vec![],
+                else_block: None
+            }
+        );
+    }
+}

@@ -114,16 +114,16 @@ impl Node {
     }
 
     #[inline]
-    fn consume(it: &mut impl Iterator<Item = RPNItem>) -> Self {
+    fn consume(it: &mut impl Iterator<Item = RPNItem>) -> Option<Self> {
         match it.next() {
             Some(RPNItem::Operator(op)) => {
-                let rhs = Self::consume(it);
-                let lhs = Self::consume(it);
+                let rhs = Self::consume(it)?;
+                let lhs = Self::consume(it)?;
 
-                Node::Compound(Box::new(lhs), op, Box::new(rhs))
+                Some(Node::Compound(Box::new(lhs), op, Box::new(rhs)))
             }
-            Some(RPNItem::Scalar(e)) => Node::Scalar(Box::new(e)),
-            _ => unreachable!(),
+            Some(RPNItem::Scalar(e)) => Some(Node::Scalar(Box::new(e))),
+            _ => None,
         }
     }
 
@@ -131,7 +131,8 @@ impl Node {
     pub fn parse<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         let rpn = Self::to_reverse_polish(tokens)?;
 
-        let res = Self::consume(&mut rpn.into_iter().rev());
+        let res = Self::consume(&mut rpn.into_iter().rev())?;
+        // Binary expression cannot be comprised of a single Scalar value
         if !matches!(res, Self::Scalar(_)) {
             Some(res)
         } else {
@@ -369,11 +370,20 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn invalid_binary_passes() {
-        Node::parse(&mut TokenIt(
+        assert!(Node::parse(&mut TokenIt(
             compiler_lexer::tokenize("2 + 4 2").flatten().peekable(),
         ))
-        .unwrap();
+        .is_none());
+
+        assert!(Node::parse(&mut TokenIt(
+            compiler_lexer::tokenize("2 + (4 * 2").flatten().peekable(),
+        ))
+        .is_none());
+
+        assert!(Node::parse(&mut TokenIt(
+            compiler_lexer::tokenize("2 + 4)").flatten().peekable(),
+        ))
+        .is_none());
     }
 }

@@ -44,8 +44,6 @@ impl<I: Iterator<Item = Token> + Clone + fmt::Debug> TokenIt<I> {
         predicate: impl Fn(&mut Self) -> Option<T>,
         sep_predicate: Option<&str>,
     ) -> Option<Vec<T>> {
-        self.ignore_newlines();
-
         self.next(|t| t.value == left_bound)?;
 
         let mut buffer = Vec::new();
@@ -61,10 +59,13 @@ impl<I: Iterator<Item = Token> + Clone + fmt::Debug> TokenIt<I> {
                 if !buffer.is_empty() {
                     self.next(|t| t.value == sep_predicate)?;
                 }
+                self.ignore_newlines();
             }
 
             let value = predicate(self)?;
             buffer.push(value);
+
+            self.ignore_newlines();
         }
 
         Some(buffer)
