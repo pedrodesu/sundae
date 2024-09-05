@@ -84,17 +84,22 @@ impl Expression {
     pub fn parse_if<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
         tokens.next(|t| t.value == "if")?;
 
+        // TODO ignore_newlines might not be necessary? if when we get next we always skip newline. is this viable? try and test.
         tokens.ignore_newlines();
 
         let condition = Expression::get(tokens)?;
 
+        tokens.ignore_newlines();
+
         let block = tokens.parse_block()?;
 
-        // FIXME needs to ignore newlines here
+        tokens.ignore_newlines();
 
-        let r#else = tokens
-            .next(|t| t.value == "else")
-            .and_then(|_| tokens.parse_block());
+        let r#else = tokens.next(|t| t.value == "else").and_then(|_| {
+            tokens.ignore_newlines();
+
+            tokens.parse_block()
+        });
 
         Some(Self::If {
             condition: Box::new(condition),
@@ -130,6 +135,8 @@ impl Expression {
 
 #[cfg(test)]
 mod tests {
+    use crate::Node;
+
     use super::*;
 
     use pretty_assertions::assert_eq;
@@ -229,7 +236,6 @@ mod tests {
         .is_none());
     }
 
-    // TODO impl if and unary extensive tests
     #[test]
     fn if_passes() {
         assert_eq!(
@@ -245,6 +251,128 @@ mod tests {
                 block: vec![],
                 else_block: None
             }
+        );
+
+        assert_eq!(
+            Expression::parse_if(&mut TokenIt(
+                compiler_lexer::tokenize("if 1 {} else {}")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Expression::If {
+                condition: Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                }),
+                block: vec![],
+                else_block: Some(vec![])
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_if(&mut TokenIt(
+                compiler_lexer::tokenize("if 2 + 2 {\ncall()\n}")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Expression::If {
+                condition: Box::new(Expression::Binary(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Plus,
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                ))),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec!["call".into()],
+                    args: vec![]
+                })],
+                else_block: None
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_if(&mut TokenIt(
+                compiler_lexer::tokenize(
+                    "if\n\n2 + 2\n\n{\n   \n  call  ()\n}\n\t  \nelse\n  \n\n{\n\n42\n\n\n}\n\n"
+                )
+                .flatten()
+                .peekable()
+            ))
+            .unwrap(),
+            Expression::If {
+                condition: Box::new(Expression::Binary(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Plus,
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                ))),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec!["call".into()],
+                    args: vec![]
+                })],
+                else_block: Some(vec![Statement::Expression(Expression::Literal {
+                    value: "42".into(),
+                    r#type: LiteralType::Int
+                })])
+            }
+        );
+    }
+
+    // TODO impl if and unary extensive tests
+    #[test]
+    fn unary_passes() {
+        assert_eq!(
+            Expression::parse_unary(&mut TokenIt(
+                compiler_lexer::tokenize("-2").flatten().peekable()
+            ))
+            .unwrap(),
+            Expression::Unary(
+                Operator::Minus,
+                Box::new(Expression::Literal {
+                    value: "2".into(),
+                    r#type: LiteralType::Int
+                })
+            )
+        );
+
+        assert_eq!(
+            Expression::parse_unary(&mut TokenIt(
+                compiler_lexer::tokenize("-(2 - 4)").flatten().peekable()
+            ))
+            .unwrap(),
+            Expression::Unary(
+                Operator::Minus,
+                Box::new(Expression::Binary(Node::Compound(
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "2".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                    Operator::Minus,
+                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        value: "4".into(),
+                        r#type: LiteralType::Int
+                    }))),
+                )))
+            )
+        );
+
+        assert_eq!(
+            Expression::parse_unary(&mut TokenIt(
+                compiler_lexer::tokenize("+2").flatten().peekable()
+            )),
+            None
         );
     }
 }

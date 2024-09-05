@@ -94,6 +94,21 @@ impl Item {
 
         let body = tokens.parse_block()?;
 
+        /* TODO!
+        if let Some(ref r#type) = r#type
+            && body
+                .iter()
+                .find(|&s| matches!(s, Statement::Return(_)))
+                .is_none()
+        {
+            return Some(Err(anyhow!(
+                "Function {} must return {}, returns void",
+                identifier,
+                r#type
+            )));
+        }
+        */
+
         Some(Self::Function {
             signature: FunctionSignature {
                 name: (identifier, r#type),
@@ -103,3 +118,5 @@ impl Item {
         })
     }
 }
+
+// TODO finish tests

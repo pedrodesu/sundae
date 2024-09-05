@@ -1,13 +1,9 @@
 #![feature(trait_alias)]
 #![feature(let_chains)]
-#![feature(const_option)]
-#![feature(const_mut_refs)]
-#![feature(const_trait_impl)]
-#![feature(effects)]
-#![feature(iter_advance_by)]
 
-use std::fmt::Debug;
+use std::fmt;
 
+use anyhow::Result;
 use compiler_lexer::definitions::TokenType;
 
 use ecow::EcoString;
@@ -21,16 +17,23 @@ mod item;
 mod iterator;
 mod statement;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Type(pub Vec<EcoString>);
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.join("::"))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ArgumentName(pub EcoString, pub Type);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Name(pub EcoString, pub Option<Type>);
 
-pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a + std::fmt::Debug {
+pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a {
+    // TODO refactor from Option<Self> to Option<Result<Self>>, handle possible error cases (only Item::parse_function was)
     const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>];
 
     fn get(tokens: &mut TokenIt<I>) -> Option<Self> {
@@ -44,15 +47,17 @@ pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a + std::fmt::Debug 
 pub struct AST(pub Vec<Item>);
 
 #[inline(always)]
-pub fn parse<'a>(input: impl TokenItTrait) -> AST {
+pub fn parse<'a>(input: impl TokenItTrait) -> Result<AST> {
     let mut iterator = TokenIt(input.peekable());
     let mut items = Vec::new();
 
     while iterator.0.peek().is_some() {
         if iterator.next(|t| t.r#type == TokenType::Newline).is_none() {
+            // let item = Item::get(&mut iterator).unwrap()?;
+            // items.push(item);
             items.push(Item::get(&mut iterator).unwrap());
         }
     }
 
-    AST(items)
+    Ok(AST(items))
 }

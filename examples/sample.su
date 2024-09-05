@@ -10,16 +10,18 @@ func op(a i32, b i32) i32 {
     if
         a < b
         {
-        ret -a * b // -a giving out problems
+        ret -a * b
     } else {
         ret (a + b) * 2
     }
 }
 
+// TODO as of now statements in if blocks need newlines which they shouldn't need (inline blocks?)
+
 func main() {
     val a i32 = op(4, 10)
     val b i32
-    
+
     b = MAGIC_NUMBER
 
     swap(a, b)
@@ -27,4 +29,3 @@ func main() {
     putd(a)
     putd(b)
 }
-

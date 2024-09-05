@@ -56,11 +56,11 @@ fn main() -> Result<()> {
         tokens
             .flatten()
             .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment),
-    );
+    )?;
 
     println!("{ast:#?}");
 
-    //compiler_codegen_llvm::gen(module, ast, ir, output)?;
+    compiler_codegen_llvm::gen(module, ast, ir, output)?;
 
     Ok(())
 }

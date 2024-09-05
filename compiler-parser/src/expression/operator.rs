@@ -47,7 +47,8 @@ const OPERATOR_MAP: &[(&str, Operator)] = {
     ]
 };
 
-pub const fn to_operator(token: &Token) -> Operator {
+// TODO make this const when possible without features
+pub fn to_operator(token: &Token) -> Operator {
     if token.r#type != TokenType::Operator {
         panic!("Token isn't an operator");
     }

@@ -79,7 +79,8 @@ impl Iterator for Lexer<'_> {
                     let next_acc = format!("{}{}", acc, next);
                     let next_t = TokenType::eval(next_acc.as_str());
 
-                    if next_t.is_some() {
+                    // TODO quick fix, this should integrate flawlessly in the lexer
+                    if next_t.is_some() || (matches!(next_acc.as_str(), "0b" | "0x" | "0o")) {
                         continue;
                     }
                 }

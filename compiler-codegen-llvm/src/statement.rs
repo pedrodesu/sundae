@@ -19,8 +19,16 @@ impl<'ctx> Codegen<'ctx> {
                     .transpose()?;
 
                 self.builder.build_return(
-                    ret.map(|v| Box::new(v.inner) as Box<dyn BasicValue>)
-                        .as_deref(),
+                    ret.map(|v| {
+                        Ok::<Box<dyn BasicValue<'_>>, anyhow::Error>(Box::new(
+                            // this generic should be implicit?
+                            self.ref_cast(v, parent_func.unwrap().borrow().return_type.clone())?
+                                .inner,
+                        )
+                            as Box<dyn BasicValue>)
+                    })
+                    .transpose()?
+                    .as_deref(),
                 )?;
 
                 Ok(())
@@ -76,7 +84,8 @@ impl<'ctx> Codegen<'ctx> {
                 if let Some(init) = init {
                     self.builder.build_store(
                         alloc,
-                        self.ref_cast(self.gen_non_void_expression(parent_func, init)?, &r#type)?,
+                        self.ref_cast(self.gen_non_void_expression(parent_func, init)?, r#type)?
+                            .inner,
                     )?;
                 }
 

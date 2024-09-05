@@ -291,23 +291,25 @@ pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Re
     // See https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/back/link.rs#L1280
     // order of priority on *nix cc -> lld -> ld
     // on msvc is lld -> link.exe
-    // fuck other platforms for now
-    let exec = Command::new("cc")
-        .args([
-            "-fuse-ld=mold",
-            object_path.to_str().unwrap(),
-            "target/debug/libsundae_library.so",
-            "-o",
-            output_path.to_str().unwrap(),
-        ])
-        .output()
-        .map_err(|m| anyhow!("Error linking object file: {m}"))?;
+    {
+        let output = Command::new("cc")
+            .args([
+                "-fuse-ld=mold",
+                object_path.to_str().unwrap(),
+                "-Ltarget/debug",
+                "-lsundae_library",
+                "-o",
+                output_path.to_str().unwrap(),
+            ])
+            .output()?;
 
-    ensure!(
-        exec.stderr.is_empty(),
-        "Error linking object file: {}",
-        std::str::from_utf8(&exec.stderr).unwrap()
-    );
+        if !output.stderr.is_empty() {
+            Err(anyhow!(String::from_utf8(output.stderr).unwrap()))
+        } else {
+            Ok(())
+        }
+    }
+    .map_err(|m| anyhow!("Error linking object file: {}", m))?;
 
     Ok(())
 }

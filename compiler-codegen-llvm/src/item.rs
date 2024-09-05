@@ -94,16 +94,17 @@ impl<'ctx> Codegen<'ctx> {
                 function.borrow_mut().init_args_stack(self)?;
 
                 for statement in body {
-                    self.gen_statement(Some(&Rc::clone(&function)), statement.clone())?;
+                    self.gen_statement(Some(&Rc::clone(&function)), statement)?;
                 }
 
                 if signature.name.0 == "main" {
-                    let ret =
-                        if let AnyTypeEnum::IntType(v) = return_type.as_llvm_any_type(self.ctx) {
-                            Some(Box::new(v.const_zero()) as Box<dyn BasicValue>)
-                        } else {
-                            bail!("type {return_type:?} can't be converted to a integer type")
-                        };
+                    let ret = if let AnyTypeEnum::IntType(v) =
+                        return_type.as_llvm_any_type(self.ctx)
+                    {
+                        Some(Box::new(v.const_zero()) as Box<dyn BasicValue>)
+                    } else {
+                        bail!("main function must return an integer type or void (returns {return_type:?})")
+                    };
 
                     self.builder.build_return(ret.as_deref())?;
                 } else if signature.name.1.is_none() {

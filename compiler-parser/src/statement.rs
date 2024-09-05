@@ -3,7 +3,7 @@ use itertools::Itertools;
 
 use crate::{expression::Expression, iterator::TokenItTrait, ExhaustiveGet, Name, TokenIt, Type};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     Return(Option<Expression>),
     Expression(Expression),
@@ -107,5 +107,111 @@ impl Statement {
                 init,
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use compiler_lexer::definitions::LiteralType;
+    use pretty_assertions::assert_eq;
+
+    // Statement::Expression is a mere simple wrapper for an already tested feature, so we don't test it here
+
+    #[test]
+    fn return_passes() {
+        assert_eq!(
+            Statement::parse_return(&mut TokenIt(
+                compiler_lexer::tokenize("ret \n").flatten().peekable()
+            ))
+            .unwrap(),
+            Statement::Return(None)
+        );
+
+        assert_eq!(
+            Statement::parse_return(&mut TokenIt(
+                compiler_lexer::tokenize("ret 42\n").flatten().peekable()
+            ))
+            .unwrap(),
+            Statement::Return(Some(Expression::Literal {
+                value: "42".into(),
+                r#type: LiteralType::Int
+            }))
+        );
+
+        assert_eq!(
+            Statement::parse_return(&mut TokenIt(
+                compiler_lexer::tokenize("ret ret\n\n").flatten().peekable()
+            )),
+            None
+        );
+    }
+
+    #[test]
+    fn assign_passes() {
+        assert_eq!(
+            Statement::parse_assign(&mut TokenIt(
+                // Can lhs of an assign expression ever be something else other than a path?
+                compiler_lexer::tokenize("a = 2\n").flatten().peekable()
+            ))
+            .unwrap(),
+            Statement::Assign {
+                destination: Expression::Path(vec!["a".into()]),
+                source: Expression::Literal {
+                    value: "2".into(),
+                    r#type: LiteralType::Int
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn local_passes() {
+        assert_eq!(
+            Statement::parse_local(&mut TokenIt(
+                compiler_lexer::tokenize("val a = 2\n").flatten().peekable()
+            ))
+            .unwrap(),
+            Statement::Local {
+                mutable: false,
+                name: Name("a".into(), None),
+                init: Some(Expression::Literal {
+                    value: "2".into(),
+                    r#type: LiteralType::Int
+                })
+            }
+        );
+
+        assert_eq!(
+            Statement::parse_local(&mut TokenIt(
+                compiler_lexer::tokenize("val b i32 = 4\n")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Statement::Local {
+                mutable: false,
+                name: Name("b".into(), Some(Type(vec!["i32".into()]))),
+                init: Some(Expression::Literal {
+                    value: "4".into(),
+                    r#type: LiteralType::Int
+                })
+            }
+        );
+
+        assert_eq!(
+            Statement::parse_local(&mut TokenIt(
+                compiler_lexer::tokenize("val b i32\n").flatten().peekable()
+            ))
+            .unwrap(),
+            Statement::Local {
+                mutable: false,
+                name: Name("b".into(), Some(Type(vec!["i32".into()]))),
+                init: None
+            }
+        );
+
+        // TODO finish tests
     }
 }

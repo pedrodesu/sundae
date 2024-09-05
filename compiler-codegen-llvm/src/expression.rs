@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::{anyhow, bail, ensure, Result};
 use compiler_lexer::definitions::LiteralType;
 use compiler_parser::{Expression, Operator};
-use inkwell::values::{BasicValue, BasicValueEnum};
+use inkwell::values::BasicValue;
 
 use crate::{Codegen, Function, Type, Value};
 
@@ -11,19 +11,20 @@ mod binary;
 
 impl<'ctx> Codegen<'ctx> {
     #[inline]
-    pub fn ref_cast(&self, from_value: Value<'ctx>, to: &Type) -> Result<BasicValueEnum<'ctx>> {
-        match [&from_value.r#type, to] {
+    pub fn ref_cast(&self, from_value: Value<'ctx>, to: Type) -> Result<Value<'ctx>> {
+        match [from_value.r#type, to] {
             [Type::MutRef(box from), Type::MutRef(box to)]
             | [Type::Ref(box from), Type::Ref(box to)]
             | [from, to]
+            // TODO i believe this if guard should be removed here, for the ensure later
                 if from == to =>
             {
-                ensure!(*from == *to, "Cast asks for `{}`, got `{}`", from, to);
+                ensure!(from == to, "Cast asks for `{}`, got `{}`", from, to);
 
-                Ok(from_value.inner)
+                Ok(Value { r#type: to.clone(), inner: from_value.inner })
             }
             [from, Type::MutRef(box to)] | [from, Type::Ref(box to)] => {
-                ensure!(*from == *to, "Cast asks for `{}`, got `{}`", from, to);
+                ensure!(from == to, "Cast asks for `{}`, got `{}`", from, to);
 
                 let ptr = self
                     .builder
@@ -31,10 +32,10 @@ impl<'ctx> Codegen<'ctx> {
 
                 self.builder.build_store(ptr, from_value.inner)?;
 
-                Ok(ptr.as_basic_value_enum())
+                Ok(Value { r#type: to.clone(), inner: ptr.as_basic_value_enum() })
             }
             [Type::MutRef(box from), to] | [Type::Ref(box from), to] => {
-                ensure!(*from == *to, "Cast asks for `{}`, got `{}`", from, to);
+                ensure!(from == to, "Cast asks for `{}`, got `{}`", from, to);
 
                 let load = self.builder.build_load(
                     to.as_llvm_basic_type(&self.ctx)?,
@@ -42,12 +43,13 @@ impl<'ctx> Codegen<'ctx> {
                     "cast",
                 )?;
 
-                Ok(load)
+                Ok(Value { r#type: to.clone(), inner: load })
             }
             _ => unreachable!(),
         }
     }
 
+    // TODO allow making a cast here directly
     #[inline]
     pub fn gen_non_void_expression(
         &self,
@@ -55,7 +57,7 @@ impl<'ctx> Codegen<'ctx> {
         expression: Expression,
     ) -> Result<Value<'ctx>> {
         self.gen_expression(parent_func, expression)
-            .and_then(|e| e.ok_or(anyhow!("Using a void value as expression")))
+            .and_then(|e| e.ok_or(anyhow!("Using void as an expression")))
     }
 
     pub fn gen_expression(
@@ -129,8 +131,10 @@ impl<'ctx> Codegen<'ctx> {
             }
             Expression::Binary(n) => Some(self.gen_binary(parent_func, n)?),
             Expression::Unary(op, box e) => {
+                let value = self.gen_non_void_expression(parent_func, e)?;
+                // TODO cast should be immediate
                 let value =
-                    self.gen_non_void_expression(Some(&Rc::clone(parent_func.unwrap())), e)?;
+                    self.ref_cast(value, parent_func.unwrap().borrow().return_type.clone())?;
 
                 if op == Operator::Minus && value.inner.is_int_value() {
                     Some(Value {
@@ -180,7 +184,8 @@ impl<'ctx> Codegen<'ctx> {
                                 e,
                             )?;
 
-                            Ok(self.ref_cast(value, &decl_type.1)?.into())
+                            // TODO we might need the cast everywhere else.. test
+                            Ok(self.ref_cast(value, decl_type.1.clone())?.inner.into())
                         })
                         .collect::<Result<Vec<_>>>()?
                         .as_slice(),

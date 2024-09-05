@@ -5,9 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = [
-    "llvm18-0",
-] }
+inkwell = { version = "0.5.0", features = ["llvm18-0"] }
 compiler-parser = { path = "../compiler-parser" }
 compiler-lexer = { path = "../compiler-lexer" }
 ecow = "0.2.2"

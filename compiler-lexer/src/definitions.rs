@@ -57,17 +57,18 @@ impl TokenType {
     }
 
     #[inline]
+    fn is_dec_int(expression: &str) -> bool {
+        expression.chars().all(|c| matches!(c, '0'..='9'))
+            && (expression.len() == 1 || !expression.starts_with('0'))
+    }
+
+    #[inline]
     fn is_hex_int(expression: &str) -> bool {
         Self::is_special_fmt_int(
             expression,
             "0x",
             |c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'),
         )
-    }
-
-    #[inline]
-    fn is_dec_int(expression: &str) -> bool {
-        expression.chars().all(|c| matches!(c, '0'..='9')) && !expression.starts_with('0')
     }
 
     #[inline]
@@ -162,6 +163,7 @@ mod tests {
 
     #[test]
     fn decimal_passes() {
+        assert!(TokenType::is_dec_int("0"));
         assert!(TokenType::is_dec_int("1234"));
         assert!(TokenType::is_dec_int("1234"));
 
