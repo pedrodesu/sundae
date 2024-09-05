@@ -1,7 +1,7 @@
 #![feature(box_patterns)]
 #![feature(let_chains)]
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, bail, Result};
 use compiler_parser::{Type as ParserType, AST};
 use ecow::EcoString;
 use inkwell::{
