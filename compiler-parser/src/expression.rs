@@ -299,6 +299,63 @@ mod tests {
 
         assert_eq!(
             Expression::parse_if(&mut TokenIt(
+                compiler_lexer::tokenize("if 1 { call() }")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Expression::If {
+                condition: Box::new(
+                    Expression::Literal {
+                        value: "1".into(),
+                        r#type: LiteralType::Int
+                    }
+                ),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec!["call".into()],
+                    args: vec![]
+                })],
+                else_block: None
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_if(&mut TokenIt(
+                compiler_lexer::tokenize("if 1{ call() }else { other_call()}")
+                    .flatten()
+                    .peekable()
+            ))
+            .unwrap(),
+            Expression::If {
+                condition: Box::new(
+                    Expression::Literal {
+                        value: "1".into(),
+                        r#type: LiteralType::Int
+                    }
+                ),
+                block: vec![
+                    Statement::Expression(
+                        Expression::Call {
+                            path: vec!["call".into()],
+                            args: vec![]
+                        }
+                    )
+                ],
+                else_block: Some(
+                    vec![
+                        Statement::Expression(
+                            Expression::Call {
+                                path: vec!["other_call".into()],
+                                args: vec![]
+                            }
+                        )
+                    ]
+                )
+            }
+        );
+
+        assert_eq!(
+            Expression::parse_if(&mut TokenIt(
                 compiler_lexer::tokenize(
                     "if\n\n2 + 2\n\n{\n   \n  call  ()\n}\n\t  \nelse\n  \n\n{\n\n42\n\n\n}\n\n"
                 )

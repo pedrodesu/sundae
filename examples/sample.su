@@ -1,4 +1,4 @@
-func swap(a &mut i32, b &mut i32) {
+func swap(a &mut i32, b &mut i32) { // TODO FIXME unexpected error
     val c i32 = a
     a = b + 4
     b = c
@@ -7,16 +7,8 @@ func swap(a &mut i32, b &mut i32) {
 const MAGIC_NUMBER i32 = 42
 
 func op(a i32, b i32) i32 {
-    if
-        a < b
-        {
-        ret -a * b
-    } else {
-        ret (a + b) * 2
-    }
+    if a < b { ret -a * b } else { ret (a + b) * 2 }
 }
-
-// TODO as of now statements in if blocks need newlines which they shouldn't need (inline blocks?)
 
 func main() {
     val a i32 = op(4, 10)

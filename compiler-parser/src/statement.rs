@@ -1,4 +1,4 @@
-use compiler_lexer::definitions::TokenType;
+use compiler_lexer::definitions::{Token, TokenType};
 use itertools::Itertools;
 
 use crate::{expression::Expression, iterator::TokenItTrait, ExhaustiveGet, Name, TokenIt, Type};
@@ -35,7 +35,7 @@ impl Statement {
     ) -> Option<Self> {
         let value = predicate(tokens)?;
 
-        tokens.next(|t| t.r#type == TokenType::Newline)?;
+        let Some(Token { r#type: TokenType::Separator | TokenType::Newline, .. }) = tokens.0.peek() else { return None };
 
         Some(value)
     }

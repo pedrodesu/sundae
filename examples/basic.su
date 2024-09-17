@@ -3,10 +3,10 @@ func add(a i32, b i32) i32 {
 }
 
 func main() {
-    a mut i32 := 40
-    b mut i32 := 32
+    val a i32 = 40
+    val b i32 = 32
 
-    c mut i32 := a
+    val c i32 = a
 
     putd(add(c, b))
 }
