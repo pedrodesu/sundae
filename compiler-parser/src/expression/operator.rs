@@ -47,16 +47,13 @@ const OPERATOR_MAP: &[(&str, Operator)] = {
     ]
 };
 
-// TODO make this const when possible without features
 pub fn to_operator(token: &Token) -> Operator {
-    if token.r#type != TokenType::Operator {
-        panic!("Token isn't an operator");
-    }
+    assert_eq!(token.r#type, TokenType::Operator, "Token isn't an operator");
 
     OPERATOR_MAP
-        .into_iter()
+        .iter()
         .copied()
-        .find(|&(k, _)| k == token.value.as_str())
+        .find(|&(k, _)| k == token.value)
         .unwrap()
         .1
 }
@@ -67,7 +64,7 @@ impl fmt::Display for Operator {
             f,
             "{}",
             OPERATOR_MAP
-                .into_iter()
+                .iter()
                 .copied()
                 .find(|&(_, v)| v == *self)
                 .unwrap()

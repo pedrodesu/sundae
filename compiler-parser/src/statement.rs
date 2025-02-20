@@ -19,7 +19,7 @@ pub enum Statement {
 }
 
 impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Statement {
-    const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] = &[
+    const PARSE_OPTIONS: &'a [Self::ParsePredicate] = &[
         Self::parse_return,
         Self::parse_assign,
         Self::parse_local,
@@ -35,7 +35,13 @@ impl Statement {
     ) -> Option<Self> {
         let value = predicate(tokens)?;
 
-        let Some(Token { r#type: TokenType::Separator | TokenType::Newline, .. }) = tokens.0.peek() else { return None };
+        let Some(Token {
+            r#type: TokenType::Separator | TokenType::Newline,
+            ..
+        }) = tokens.0.peek()
+        else {
+            return None;
+        };
 
         Some(value)
     }

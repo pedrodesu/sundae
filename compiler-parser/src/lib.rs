@@ -1,5 +1,6 @@
 #![feature(trait_alias)]
 #![feature(let_chains)]
+#![feature(associated_type_defaults)]
 
 use std::fmt;
 
@@ -33,6 +34,8 @@ pub struct ArgumentName(pub EcoString, pub Type);
 pub struct Name(pub EcoString, pub Option<Type>);
 
 pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a {
+    type ParsePredicate = fn(&mut TokenIt<I>) -> Option<Self>;
+
     // TODO refactor from Option<Self> to Option<Result<Self>>, handle possible error cases (only Item::parse_function was)
     const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>];
 
@@ -47,7 +50,7 @@ pub trait ExhaustiveGet<'a, I: TokenItTrait + 'a>: Sized + 'a {
 pub struct AST(pub Vec<Item>);
 
 #[inline(always)]
-pub fn parse<'a>(input: impl TokenItTrait) -> Result<AST> {
+pub fn parse(input: impl TokenItTrait) -> Result<AST> {
     let mut iterator = TokenIt(input.peekable());
     let mut items = Vec::new();
 

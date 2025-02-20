@@ -14,7 +14,7 @@ pub enum Expression {
         r#type: LiteralType,
     },
     Path(Vec<EcoString>),
-    Binary(binary::Node),
+    Binary(Box<binary::Node>),
     Unary(Operator, Box<Expression>),
     Call {
         path: Vec<EcoString>,
@@ -28,7 +28,7 @@ pub enum Expression {
 }
 
 impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Expression {
-    const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] = &[
+    const PARSE_OPTIONS: &'a [Self::ParsePredicate] = &[
         Self::parse_if,
         Self::parse_binary,
         Self::parse_unary,
@@ -68,7 +68,7 @@ impl Expression {
 
     #[inline]
     pub fn parse_binary<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        binary::Node::parse(tokens).map(Self::Binary)
+        binary::Node::parse(tokens).map(|n| Self::Binary(Box::new(n)))
     }
 
     pub fn parse_call<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
@@ -278,17 +278,17 @@ mod tests {
             ))
             .unwrap(),
             Expression::If {
-                condition: Box::new(Expression::Binary(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                condition: Box::new(Expression::Binary(Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Plus,
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
-                ))),
+                    })),
+                )))),
                 block: vec![Statement::Expression(Expression::Call {
                     path: vec!["call".into()],
                     args: vec![]
@@ -305,12 +305,10 @@ mod tests {
             ))
             .unwrap(),
             Expression::If {
-                condition: Box::new(
-                    Expression::Literal {
-                        value: "1".into(),
-                        r#type: LiteralType::Int
-                    }
-                ),
+                condition: Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                }),
                 block: vec![Statement::Expression(Expression::Call {
                     path: vec!["call".into()],
                     args: vec![]
@@ -327,30 +325,18 @@ mod tests {
             ))
             .unwrap(),
             Expression::If {
-                condition: Box::new(
-                    Expression::Literal {
-                        value: "1".into(),
-                        r#type: LiteralType::Int
-                    }
-                ),
-                block: vec![
-                    Statement::Expression(
-                        Expression::Call {
-                            path: vec!["call".into()],
-                            args: vec![]
-                        }
-                    )
-                ],
-                else_block: Some(
-                    vec![
-                        Statement::Expression(
-                            Expression::Call {
-                                path: vec!["other_call".into()],
-                                args: vec![]
-                            }
-                        )
-                    ]
-                )
+                condition: Box::new(Expression::Literal {
+                    value: "1".into(),
+                    r#type: LiteralType::Int
+                }),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec!["call".into()],
+                    args: vec![]
+                })],
+                else_block: Some(vec![Statement::Expression(Expression::Call {
+                    path: vec!["other_call".into()],
+                    args: vec![]
+                })])
             }
         );
 
@@ -364,17 +350,17 @@ mod tests {
             ))
             .unwrap(),
             Expression::If {
-                condition: Box::new(Expression::Binary(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                condition: Box::new(Expression::Binary(Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Plus,
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
-                ))),
+                    })),
+                )))),
                 block: vec![Statement::Expression(Expression::Call {
                     path: vec!["call".into()],
                     args: vec![]
@@ -411,17 +397,17 @@ mod tests {
             .unwrap(),
             Expression::Unary(
                 Operator::Minus,
-                Box::new(Expression::Binary(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Expression::Binary(Box::new(Node::Compound(
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Minus,
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "4".into(),
                         r#type: LiteralType::Int
-                    }))),
-                )))
+                    })),
+                ))))
             )
         );
 

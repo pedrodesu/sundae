@@ -19,7 +19,7 @@ const OPERATOR_PRIORITY: &[&[Operator]] = {
 #[inline]
 fn priority(operator: Operator) -> usize {
     OPERATOR_PRIORITY
-        .into_iter()
+        .iter()
         .copied()
         .position(|v| v.contains(&operator))
         .map(|v| v + 1)
@@ -29,7 +29,7 @@ fn priority(operator: Operator) -> usize {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
-    Scalar(Box<Expression>),
+    Scalar(Expression),
     Compound(Box<Node>, Operator, Box<Node>),
 }
 
@@ -122,7 +122,7 @@ impl Node {
 
                 Some(Node::Compound(Box::new(lhs), op, Box::new(rhs)))
             }
-            Some(RPNItem::Scalar(e)) => Some(Node::Scalar(Box::new(e))),
+            Some(RPNItem::Scalar(e)) => Some(Node::Scalar(e)),
             _ => None,
         }
     }
@@ -157,15 +157,15 @@ mod tests {
             ))
             .unwrap(),
             Node::Compound(
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "9".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
                 Operator::Plus,
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "10".into(),
                     r#type: LiteralType::Int
-                })))
+                }))
             )
         );
     }
@@ -178,18 +178,18 @@ mod tests {
             ))
             .unwrap(),
             Node::Compound(
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "10".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
                 Operator::Minus,
-                Box::new(Node::Scalar(Box::new(Expression::Unary(
+                Box::new(Node::Scalar(Expression::Unary(
                     Operator::Minus,
                     Box::new(Expression::Literal {
                         value: "1".into(),
                         r#type: LiteralType::Int
                     })
-                ))))
+                )))
             )
         );
     }
@@ -205,28 +205,28 @@ mod tests {
             .unwrap(),
             Node::Compound(
                 Box::new(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "9".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Minus,
                     Box::new(Node::Compound(
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "2".into(),
                             r#type: LiteralType::Int
-                        }))),
+                        })),
                         Operator::Star,
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "4".into(),
                             r#type: LiteralType::Int
-                        })))
+                        }))
                     ))
                 )),
                 Operator::Plus,
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "1".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
             )
         );
     }
@@ -242,28 +242,28 @@ mod tests {
             .unwrap(),
             Node::Compound(
                 Box::new(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "9".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Minus,
                     Box::new(Node::Compound(
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "2".into(),
                             r#type: LiteralType::Int
-                        }))),
+                        })),
                         Operator::Star,
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "4".into(),
                             r#type: LiteralType::Int
-                        })))
+                        }))
                     )),
                 )),
                 Operator::Shr,
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "1".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
             )
         );
     }
@@ -276,15 +276,15 @@ mod tests {
             ))
             .unwrap(),
             Node::Compound(
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "4".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
                 Operator::Plus,
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "1".into(),
                     r#type: LiteralType::Int
-                })))
+                }))
             )
         );
 
@@ -296,27 +296,27 @@ mod tests {
             ))
             .unwrap(),
             Node::Compound(
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "9".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
                 Operator::Minus,
                 Box::new(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Star,
                     Box::new(Node::Compound(
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "4".into(),
                             r#type: LiteralType::Int
-                        }))),
+                        })),
                         Operator::Plus,
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "1".into(),
                             r#type: LiteralType::Int
-                        })))
+                        }))
                     ))
                 ))
             )
@@ -333,19 +333,19 @@ mod tests {
             ))
             .unwrap(),
             Node::Compound(
-                Box::new(Node::Scalar(Box::new(Expression::Literal {
+                Box::new(Node::Scalar(Expression::Literal {
                     value: "9".into(),
                     r#type: LiteralType::Int
-                }))),
+                })),
                 Operator::Shl,
                 Box::new(Node::Compound(
-                    Box::new(Node::Scalar(Box::new(Expression::Literal {
+                    Box::new(Node::Scalar(Expression::Literal {
                         value: "2".into(),
                         r#type: LiteralType::Int
-                    }))),
+                    })),
                     Operator::Star,
                     Box::new(Node::Compound(
-                        Box::new(Node::Scalar(Box::new(Expression::Call {
+                        Box::new(Node::Scalar(Expression::Call {
                             path: vec!["add".into()],
                             args: vec![
                                 Expression::Literal {
@@ -357,12 +357,12 @@ mod tests {
                                     r#type: LiteralType::Int
                                 }
                             ]
-                        }))),
+                        })),
                         Operator::Plus,
-                        Box::new(Node::Scalar(Box::new(Expression::Literal {
+                        Box::new(Node::Scalar(Expression::Literal {
                             value: "1".into(),
                             r#type: LiteralType::Int
-                        })))
+                        }))
                     ))
                 ))
             )

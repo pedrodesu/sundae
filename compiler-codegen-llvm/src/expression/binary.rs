@@ -19,7 +19,7 @@ impl<'ctx> Codegen<'ctx> {
         let eval_side = |parent_func, node| {
             anyhow::Ok(
                 match node {
-                    Node::Scalar(box node) => self.ref_cast(
+                    Node::Scalar(node) => self.ref_cast(
                         self.gen_non_void_expression(parent_func, node)?,
                         Type::Integer {
                             width: 32,

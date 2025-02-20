@@ -25,7 +25,6 @@ struct Args {
     source: PathBuf,
 }
 
-#[inline]
 fn path_is_valid_file(s: &str) -> Result<PathBuf> {
     let path = Path::new(s);
     if path.is_file() {
@@ -45,12 +44,13 @@ fn main() -> Result<()> {
 
     let tokens = compiler_lexer::tokenize(&file);
 
+    // tokens.clone().for_each(|t| println!("{:?}", t));
+
+    // TODO I don't like cloning here and flattening later
     tokens
         .clone()
         .try_for_each(|e| e.map(|_| ()))
         .context("Lexer failed")?;
-
-    // tokens.clone().for_each(|t| println!("{:?}", t));
 
     let ast = compiler_parser::parse(
         tokens
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
 
     println!("{ast:#?}");
 
-    compiler_codegen_llvm::gen(module, ast, ir, output)?;
+    // compiler_codegen_llvm::gen(module, ast, ir, output)?;
 
     Ok(())
 }

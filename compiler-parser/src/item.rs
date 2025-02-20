@@ -26,8 +26,7 @@ pub enum Item {
 }
 
 impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Item {
-    const PARSE_OPTIONS: &'a [fn(&mut TokenIt<I>) -> Option<Self>] =
-        &[Self::parse_const, Self::parse_function];
+    const PARSE_OPTIONS: &'a [Self::ParsePredicate] = &[Self::parse_const, Self::parse_function];
 }
 
 impl Item {

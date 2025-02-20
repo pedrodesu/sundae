@@ -58,6 +58,6 @@ impl<I: TokenItTrait> TokenIt<I> {
 
     #[inline]
     pub fn parse_block(&mut self) -> Option<Vec<Statement>> {
-        self.parse_generic_list(("{", "}"), |t| Statement::get(t), None)
+        self.parse_generic_list(("{", "}"), Statement::get, None)
     }
 }

@@ -1,6 +1,6 @@
 #![feature(iter_next_chunk)]
 
-use std::{fmt, iter::Peekable, str::Chars};
+use std::{iter::Peekable, str::Chars};
 
 use anyhow::{anyhow, Result};
 use ecow::EcoString;
@@ -11,14 +11,14 @@ use self::definitions::*;
 pub mod definitions;
 
 #[derive(Debug, Clone)]
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     iterator: Peekable<Chars<'a>>,
 }
 
 impl Lexer<'_> {
     fn get_str_or_rune(&mut self) -> Option<Result<Token>> {
-        let Some(c @ (definitions::STR_DELIM | definitions::RUNE_DELIM)) =
-            self.iterator.peek().copied()
+        let c @ (definitions::STR_DELIM | definitions::RUNE_DELIM) =
+            self.iterator.peek().copied()?
         else {
             return None;
         };
@@ -102,7 +102,7 @@ impl Iterator for Lexer<'_> {
 }
 
 #[inline(always)]
-pub fn tokenize(input: &str) -> impl Iterator<Item = Result<Token>> + Clone + fmt::Debug + '_ {
+pub fn tokenize(input: &str) -> Lexer {
     Lexer {
         iterator: input.chars().peekable(),
     }

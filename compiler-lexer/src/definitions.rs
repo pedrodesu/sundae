@@ -58,17 +58,12 @@ impl TokenType {
 
     #[inline]
     fn is_dec_int(expression: &str) -> bool {
-        expression.chars().all(|c| matches!(c, '0'..='9'))
-            && (expression.len() == 1 || !expression.starts_with('0'))
+        expression.chars().all(|c| c.is_ascii_digit())
     }
 
     #[inline]
     fn is_hex_int(expression: &str) -> bool {
-        Self::is_special_fmt_int(
-            expression,
-            "0x",
-            |c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'),
-        )
+        Self::is_special_fmt_int(expression, "0x", |c| c.is_ascii_hexdigit())
     }
 
     #[inline]
@@ -95,7 +90,7 @@ impl TokenType {
         expression
             .chars()
             .all(|c| matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
-            && expression.starts_with(|c| !matches!(c, '0'..='9'))
+            && expression.starts_with(|c: char| !c.is_ascii_digit())
     }
 
     #[inline]
@@ -132,6 +127,7 @@ mod tests {
     fn hexadecimal_passes() {
         assert!(TokenType::is_hex_int("0x42069FFFff"));
         assert!(TokenType::is_hex_int("0xffffffffffffffffffffffffffffffff"));
+        assert!(TokenType::is_hex_int("0xDEADBEEF"));
 
         assert!(!TokenType::is_hex_int("0x"));
         assert!(!TokenType::is_hex_int("0X42069FFFff"));
@@ -164,7 +160,8 @@ mod tests {
     #[test]
     fn decimal_passes() {
         assert!(TokenType::is_dec_int("0"));
-        assert!(TokenType::is_dec_int("1234"));
+        assert!(TokenType::is_dec_int("00"));
+        assert!(TokenType::is_dec_int("01234"));
         assert!(TokenType::is_dec_int("1234"));
 
         assert!(!TokenType::is_dec_int("42.0"));
@@ -174,9 +171,10 @@ mod tests {
     #[test]
     fn float_passes() {
         assert!(TokenType::is_float("12.34"));
+        assert!(TokenType::is_float("64."));
+        assert!(TokenType::is_float("00."));
         assert!(TokenType::is_float("01234.00"));
-        assert!(TokenType::is_float("-42.060"));
-        assert!(TokenType::is_float("-64."));
+        assert!(TokenType::is_float("42.060"));
 
         assert!(!TokenType::is_float("42"));
         assert!(!TokenType::is_float("42.0a"));

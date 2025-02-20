@@ -58,11 +58,11 @@ impl TryFrom<ParserType> for Type {
         if let [a, b, c @ ..] = value.0.as_slice()
             && let ["&", "mut"] = [a.as_str(), b.as_str()]
         {
-            return Ok(Self::MutRef(Box::new(ParserType(c.to_vec()).try_into()?)));
+            Ok(Self::MutRef(Box::new(ParserType(c.to_vec()).try_into()?)))
         } else if let [a, b @ ..] = value.0.as_slice()
             && let ["&"] = [a.as_str()]
         {
-            return Ok(Self::Ref(Box::new(ParserType(b.to_vec()).try_into()?)));
+            Ok(Self::Ref(Box::new(ParserType(b.to_vec()).try_into()?)))
         } else {
             let r#type = &value.0[0]; // TODO assume for now, modify when we have structs (and fields, thus)
 
@@ -164,7 +164,7 @@ impl Function<'_> {
             .try_for_each(|((name, r#type), arg)| {
                 let ptr = codegen
                     .builder
-                    .build_alloca(r#type.as_llvm_basic_type(&codegen.ctx)?, &name)?;
+                    .build_alloca(r#type.as_llvm_basic_type(codegen.ctx)?, &name)?;
 
                 codegen.builder.build_store(ptr, arg)?;
 

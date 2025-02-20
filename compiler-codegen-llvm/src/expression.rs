@@ -28,7 +28,7 @@ impl<'ctx> Codegen<'ctx> {
 
                 let ptr = self
                     .builder
-                    .build_alloca(from.as_llvm_basic_type(&self.ctx)?, "cast")?;
+                    .build_alloca(from.as_llvm_basic_type(self.ctx)?, "cast")?;
 
                 self.builder.build_store(ptr, from_value.inner)?;
 
@@ -38,7 +38,7 @@ impl<'ctx> Codegen<'ctx> {
                 ensure!(from == to, "Cast asks for `{}`, got `{}`", from, to);
 
                 let load = self.builder.build_load(
-                    to.as_llvm_basic_type(&self.ctx)?,
+                    to.as_llvm_basic_type(self.ctx)?,
                     from_value.inner.into_pointer_value(),
                     "cast",
                 )?;
@@ -129,7 +129,7 @@ impl<'ctx> Codegen<'ctx> {
                     Some(lookup)
                 }
             }
-            Expression::Binary(n) => Some(self.gen_binary(parent_func, n)?),
+            Expression::Binary(box n) => Some(self.gen_binary(parent_func, n)?),
             Expression::Unary(op, box e) => {
                 let value = self.gen_non_void_expression(parent_func, e)?;
                 // TODO cast should be immediate

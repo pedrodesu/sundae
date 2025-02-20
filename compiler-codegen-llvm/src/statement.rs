@@ -50,7 +50,7 @@ impl<'ctx> Codegen<'ctx> {
                         let inner_ptr = source.inner.into_pointer_value();
 
                         self.builder.build_load(
-                            inner_type.as_llvm_basic_type(&self.ctx)?,
+                            inner_type.as_llvm_basic_type(self.ctx)?,
                             inner_ptr,
                             "load",
                         )?
@@ -71,7 +71,7 @@ impl<'ctx> Codegen<'ctx> {
 
                 let alloc = self
                     .builder
-                    .build_alloca(r#type.as_llvm_basic_type(&self.ctx)?, &name.0)?;
+                    .build_alloca(r#type.as_llvm_basic_type(self.ctx)?, &name.0)?;
 
                 parent_func.as_ref().unwrap().borrow_mut().stack.insert(
                     name.0,

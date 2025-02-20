@@ -9,7 +9,7 @@ use inkwell::{
 use crate::{Codegen, Function, Type, Value};
 use compiler_parser::Item;
 
-impl<'ctx> Codegen<'ctx> {
+impl Codegen<'_> {
     pub fn gen_item(&self, item: Item) -> Result<()> {
         match item {
             Item::Const { name, value } => {
