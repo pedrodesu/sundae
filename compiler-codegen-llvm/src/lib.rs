@@ -1,45 +1,69 @@
 #![feature(box_patterns)]
 #![feature(let_chains)]
 
-use anyhow::{anyhow, bail, Result};
-use compiler_parser::{Type as ParserType, AST};
+use std::{cell::RefCell, collections::HashMap, fmt, fs, path::PathBuf, process::Command, rc::Rc};
+
+use anyhow::{Result, anyhow, bail};
+use compiler_parser::{AST, Type as ParserType};
 use ecow::EcoString;
 use inkwell::{
+    OptimizationLevel,
     builder::Builder,
     context::Context,
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{AnyType, AnyTypeEnum, BasicType, BasicTypeEnum},
     values::{BasicValueEnum, FunctionValue},
-    OptimizationLevel,
 };
-use std::{cell::RefCell, collections::HashMap, fmt, fs, path::PathBuf, process::Command, rc::Rc};
 
 mod expression;
 mod item;
 mod statement;
 
-#[derive(Clone, PartialEq, Debug)]
-pub enum Type {
-    Integer { width: u32, signed: bool },
-    Float(u32),
-    Void,
-    Array { scalar: Box<Type>, size: u32 },
-    Ref(Box<Type>),
-    MutRef(Box<Type>),
+pub struct Settings
+{
+    pub ir: bool,
+    pub opt: u8,
+    pub output: Option<PathBuf>,
 }
 
-impl Default for Type {
+#[derive(Clone, PartialEq, Debug)]
+pub enum Type
+{
+    Integer
+    {
+        width: u32,
+        signed: bool,
+    },
+    Float(u32),
+    Void,
+    Array
+    {
+        scalar: Box<Type>,
+        size: u32,
+    },
+    Ref(Box<Type>),
+    MutRef(Box<Type>),
+    Tuple(Vec<Type>),
+}
+
+impl Default for Type
+{
     #[inline]
-    fn default() -> Self {
+    fn default() -> Self
+    {
         Self::Void
     }
 }
 
-impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Type::Integer { width, signed } => {
+impl fmt::Display for Type
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        match self
+        {
+            Type::Integer { width, signed } =>
+            {
                 write!(f, "{}{width}", if *signed { "i" } else { "u" })
             }
             Type::Float(width) => write!(f, "f{width}"),
@@ -47,35 +71,93 @@ impl fmt::Display for Type {
             Type::Array { box scalar, size } => write!(f, "[{size}]{scalar}"),
             Type::Ref(box v) => write!(f, "&{v}"),
             Type::MutRef(box v) => write!(f, "&mut {v}"),
+            Type::Tuple(items) =>
+            {
+                write!(f, "(")?;
+                items.iter().enumerate().try_for_each(|(i, item)| {
+                    if i > 0
+                    {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")
+                })?;
+                write!(f, ")")
+            }
         }
     }
 }
 
-impl TryFrom<ParserType> for Type {
+impl TryFrom<ParserType> for Type
+{
     type Error = anyhow::Error;
 
-    fn try_from(value: ParserType) -> Result<Self, Self::Error> {
+    fn try_from(value: ParserType) -> Result<Self, Self::Error>
+    {
         if let [a, b, c @ ..] = value.0.as_slice()
             && let ["&", "mut"] = [a.as_str(), b.as_str()]
         {
             Ok(Self::MutRef(Box::new(ParserType(c.to_vec()).try_into()?)))
-        } else if let [a, b @ ..] = value.0.as_slice()
+        }
+        else if let [a, b @ ..] = value.0.as_slice()
             && let ["&"] = [a.as_str()]
         {
             Ok(Self::Ref(Box::new(ParserType(b.to_vec()).try_into()?)))
-        } else {
+        }
+        else if let [a, .., c] = value.0.as_slice()
+            && let ["(", ")"] = [a.as_str(), c.as_str()]
+        {
+            todo!()
+            // values.iter().scan(Ok(EcoVec::new()), |it, v| {
+            //     if v == ","
+            //     // skip commas
+            //     {
+            //         None
+            //     }
+            //     else
+            //     {
+            //         it.push(ParserType(vec![v.clone()]).try_into()?);
+            //         Some(it)
+            //     }
+            // });
+
+            // let items = it
+            //     .map(|v| ParserType(vec![v.clone()]).try_into())
+            //     .collect::<Result<Vec<_>, _>>()?;
+
+            // Ok(Self::Tuple(items))
+        }
+        // else if let [a, b @ ..] = value.0.as_slice()
+        //     && let ["[", "]"] = [a.as_str(), b.last().unwrap().as_str()]
+        //     && let Some(size) = b.first().and_then(|s| s.parse::<u32>().ok())
+        // {
+        //     if b.len() != 2
+        //     {
+        //         return Err(anyhow!("Array type must have exactly one scalar type"));
+        //     }
+
+        //     Ok(Self::Array {
+        //         scalar: Box::new(ParserType(b[1].clone()).try_into()?),
+        //         size,
+        //     })
+        // }
+        else
+        {
             let r#type = &value.0[0]; // TODO assume for now, modify when we have structs (and fields, thus)
 
             let (signedness, bits) = r#type.split_at(1);
-            if matches!(signedness, "u" | "i") {
+            if matches!(signedness, "u" | "i")
+            {
                 Ok(Self::Integer {
                     width: bits
                         .parse()
                         .map_err(|_| anyhow!("Integer with invalid width"))?,
                     signed: signedness == "i",
                 })
-            } else {
-                match r#type.as_str() {
+            }
+            else
+            {
+                match r#type.as_str()
+                {
                     "f16" => Ok(Self::Float(16)),
                     "f32" => Ok(Self::Float(32)),
                     "f64" => Ok(Self::Float(64)),
@@ -88,12 +170,16 @@ impl TryFrom<ParserType> for Type {
     }
 }
 
-impl Type {
+impl Type
+{
     #[inline]
-    pub fn as_llvm_any_type<'ctx>(&self, ctx: &'ctx Context) -> AnyTypeEnum<'ctx> {
-        match self.as_llvm_basic_type(ctx) {
+    pub fn as_llvm_any_type<'ctx>(&self, ctx: &'ctx Context) -> AnyTypeEnum<'ctx>
+    {
+        match self.as_llvm_basic_type(ctx)
+        {
             Ok(t) => t.as_any_type_enum(),
-            Err(_) => match self {
+            Err(_) => match self
+            {
                 Type::Void => ctx.void_type().into(),
                 _ => unreachable!(),
             },
@@ -101,9 +187,12 @@ impl Type {
     }
 
     #[inline]
-    pub fn as_llvm_basic_type<'ctx>(&self, ctx: &'ctx Context) -> Result<BasicTypeEnum<'ctx>> {
-        match self {
-            Self::Integer { width, .. } => Ok(match width {
+    pub fn as_llvm_basic_type<'ctx>(&self, ctx: &'ctx Context) -> Result<BasicTypeEnum<'ctx>>
+    {
+        match self
+        {
+            Self::Integer { width, .. } => Ok(match width
+            {
                 8 => ctx.i8_type().into(),
                 16 => ctx.i16_type().into(),
                 32 => ctx.i32_type().into(),
@@ -111,14 +200,16 @@ impl Type {
                 128 => ctx.i128_type().into(),
                 n => ctx.custom_width_int_type(*n).into(),
             }),
-            Self::Float(width) => Ok(match width {
+            Self::Float(width) => Ok(match width
+            {
                 16 => ctx.f16_type().into(),
                 32 => ctx.f32_type().into(),
                 64 => ctx.f64_type().into(),
                 128 => ctx.f128_type().into(),
                 _ => unreachable!(),
             }),
-            Self::Array { box scalar, size } => {
+            Self::Array { box scalar, size } =>
+            {
                 Ok(scalar.as_llvm_basic_type(ctx)?.array_type(*size).into())
             }
             Self::Ref(_) | Self::MutRef(_) => Ok(ctx.ptr_type(Default::default()).into()),
@@ -128,7 +219,8 @@ impl Type {
 }
 
 #[derive(Clone, Debug)]
-pub struct Value<'ctx> {
+pub struct Value<'ctx>
+{
     pub r#type: Type,
     pub inner: BasicValueEnum<'ctx>,
 }
@@ -141,22 +233,26 @@ pub struct Local<'ctx> {
 */
 
 #[derive(Clone, Debug)]
-pub struct Function<'ctx> {
+pub struct Function<'ctx>
+{
     pub arguments: Vec<(EcoString, Type)>,
     pub return_type: Type,
     pub stack: HashMap<EcoString, Value<'ctx>>,
     pub inner: FunctionValue<'ctx>,
 }
 
-impl Function<'_> {
+impl Function<'_>
+{
     #[inline]
-    pub fn init_block(&mut self, codegen: &Codegen) {
+    pub fn init_block(&mut self, codegen: &Codegen)
+    {
         let block = codegen.ctx.append_basic_block(self.inner, "entry");
         codegen.builder.position_at_end(block);
     }
 
     #[inline]
-    pub fn init_args_stack(&mut self, codegen: &Codegen) -> Result<()> {
+    pub fn init_args_stack(&mut self, codegen: &Codegen) -> Result<()>
+    {
         self.arguments
             .clone()
             .into_iter()
@@ -176,19 +272,22 @@ impl Function<'_> {
 }
 
 #[derive(Default)]
-pub struct Runtime<'ctx> {
+pub struct Runtime<'ctx>
+{
     pub functions: HashMap<EcoString, Rc<RefCell<Function<'ctx>>>>,
     pub constants: HashMap<EcoString, Value<'ctx>>,
 }
 
-pub struct Codegen<'ctx> {
+pub struct Codegen<'ctx>
+{
     pub ctx: &'ctx Context,
     pub module: Module<'ctx>,
     pub builder: Builder<'ctx>,
     pub runtime: Rc<RefCell<Runtime<'ctx>>>,
 }
 
-pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Result<()> {
+pub fn gen(module: &str, ast: AST, settings: Settings) -> Result<()>
+{
     let ctx = Context::create();
 
     let codegen = {
@@ -204,8 +303,11 @@ pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Re
         }
     };
 
-    // TODO extern whole lib
-    // https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/LangImpl03.html
+    // TODO extern used symbols
+    // On build dump std as LLVM IR
+    // Read LLVM IR
+    // On `std` symbol, get it from here
+
     Target::initialize_native(&InitializationConfig {
         asm_parser: false,
         asm_printer: true,
@@ -226,54 +328,65 @@ pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Re
             &triple,
             "generic",
             "",
-            OptimizationLevel::None,
+            match settings.opt
+            {
+                0 => OptimizationLevel::None,
+                1 => OptimizationLevel::Less,
+                2 => OptimizationLevel::Default,
+                3 => OptimizationLevel::Aggressive,
+                _ => unreachable!(),
+            },
             RelocMode::Default,
             CodeModel::Default,
         )
         .unwrap();
 
-    codegen.runtime.borrow_mut().functions.insert(
-        "putd".into(),
-        Rc::new(RefCell::new(Function {
-            arguments: vec![(
-                "n".into(),
-                Type::Integer {
-                    width: 32,
-                    signed: true,
-                },
-            )],
-            return_type: Type::Void,
-            stack: Default::default(),
-            inner: codegen.module.add_function(
-                "putd",
-                codegen
-                    .ctx
-                    .void_type()
-                    .fn_type(&[codegen.ctx.i32_type().into()], false),
-                None,
-            ),
-        })),
-    );
+    // codegen.runtime.borrow_mut().functions.insert(
+    //     "putd".into(),
+    //     Rc::new(RefCell::new(Function {
+    //         arguments: vec![(
+    //             "n".into(),
+    //             Type::Integer {
+    //                 width: 32,
+    //                 signed: true,
+    //             },
+    //         )],
+    //         return_type: Type::Void,
+    //         stack: Default::default(),
+    //         inner: codegen.module.add_function(
+    //             "putd",
+    //             codegen
+    //                 .ctx
+    //                 .void_type()
+    //                 .fn_type(&[codegen.ctx.i32_type().into()], false),
+    //             None,
+    //         ),
+    //     })),
+    // );
 
     ast.0.into_iter().try_for_each(|i| codegen.gen_item(i))?;
 
     let output_path = {
-        let base = output_path.unwrap_or_default();
-        // hacky way to check for trailing slash because Components (https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.components)
+        let base = settings.output.unwrap_or_default();
+        // hacky way to check for trailing slash because [Components](https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.components) `A trailing slash is normalized away, /a/b and /a/b/ are equivalent.`
         if base.as_os_str().is_empty()
             || base.to_string_lossy().ends_with(std::path::MAIN_SEPARATOR)
         {
             base.join(module)
-        } else {
+        }
+        else
+        {
             base
         }
     };
 
-    if let Some(root_path) = output_path.parent() {
+    if let Some(root_path) = output_path.parent()
+    {
         fs::create_dir_all(root_path)?;
     }
 
-    if ir {
+    if settings.ir
+    {
         let ir_path = output_path.with_extension("ll");
 
         codegen
@@ -303,9 +416,12 @@ pub fn gen(module: &str, ast: AST, ir: bool, output_path: Option<PathBuf>) -> Re
             ])
             .output()?;
 
-        if !output.stderr.is_empty() {
+        if !output.stderr.is_empty()
+        {
             Err(anyhow!(String::from_utf8(output.stderr).unwrap()))
-        } else {
+        }
+        else
+        {
             Ok(())
         }
     }

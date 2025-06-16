@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-itertools = "0.13.0"
+itertools = "0.14.0"
 compiler-lexer = { path = "../compiler-lexer" }
-ecow = "0.2.2"
-anyhow = "1.0.86"
+ecow = "0.2.5"
+snafu = "0.8.5"
 
 [dev-dependencies]
 pretty_assertions = "1"

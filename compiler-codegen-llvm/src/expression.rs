@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{Result, anyhow, bail, ensure};
 use compiler_lexer::definitions::LiteralType;
 use compiler_parser::{Expression, Operator};
 use inkwell::values::BasicValue;
@@ -9,9 +9,11 @@ use crate::{Codegen, Function, Type, Value};
 
 mod binary;
 
-impl<'ctx> Codegen<'ctx> {
+impl<'ctx> Codegen<'ctx>
+{
     #[inline]
-    pub fn ref_cast(&self, from_value: Value<'ctx>, to: Type) -> Result<Value<'ctx>> {
+    pub fn ref_cast(&self, from_value: Value<'ctx>, to: Type) -> Result<Value<'ctx>>
+    {
         match [from_value.r#type, to] {
             [Type::MutRef(box from), Type::MutRef(box to)]
             | [Type::Ref(box from), Type::Ref(box to)]
@@ -53,21 +55,26 @@ impl<'ctx> Codegen<'ctx> {
     #[inline]
     pub fn gen_non_void_expression(
         &self,
-        parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
+        parent_func: &Option<Rc<RefCell<Function<'ctx>>>>,
         expression: Expression,
-    ) -> Result<Value<'ctx>> {
+    ) -> Result<Value<'ctx>>
+    {
         self.gen_expression(parent_func, expression)
             .and_then(|e| e.ok_or(anyhow!("Using void as an expression")))
     }
 
     pub fn gen_expression(
         &self,
-        parent_func: Option<&Rc<RefCell<Function<'ctx>>>>,
+        parent_func: &Option<Rc<RefCell<Function<'ctx>>>>,
         expression: Expression,
-    ) -> Result<Option<Value<'ctx>>> {
-        Ok(match expression {
-            Expression::Literal { value, r#type } => Some(match r#type {
-                LiteralType::String => {
+    ) -> Result<Option<Value<'ctx>>>
+    {
+        Ok(match expression
+        {
+            Expression::Literal { value, r#type } => Some(match r#type
+            {
+                LiteralType::String =>
+                {
                     let bytes = value[1..value.len() - 1].as_bytes();
 
                     Value {
@@ -104,10 +111,12 @@ impl<'ctx> Codegen<'ctx> {
                     r#type: Type::Float(64),
                 },
             }),
-            Expression::Path(path) => {
+            Expression::Path(path) =>
+            {
                 let name = path.last().unwrap();
 
-                if let Some(global) = self.runtime.borrow().constants.get(path[0].as_str()) {
+                if let Some(global) = self.runtime.borrow().constants.get(path[0].as_str())
+                {
                     Some(Value {
                         r#type: global.r#type.clone(),
                         inner: self
@@ -117,8 +126,11 @@ impl<'ctx> Codegen<'ctx> {
                             .get_initializer()
                             .unwrap(),
                     })
-                } else {
+                }
+                else
+                {
                     let lookup = parent_func
+                        .as_ref()
                         .unwrap()
                         .borrow()
                         .stack
@@ -130,13 +142,17 @@ impl<'ctx> Codegen<'ctx> {
                 }
             }
             Expression::Binary(box n) => Some(self.gen_binary(parent_func, n)?),
-            Expression::Unary(op, box e) => {
+            Expression::Unary(op, box e) =>
+            {
                 let value = self.gen_non_void_expression(parent_func, e)?;
                 // TODO cast should be immediate
-                let value =
-                    self.ref_cast(value, parent_func.unwrap().borrow().return_type.clone())?;
+                let value = self.ref_cast(
+                    value,
+                    parent_func.as_ref().unwrap().borrow().return_type.clone(),
+                )?;
 
-                if op == Operator::Minus && value.inner.is_int_value() {
+                if op == Operator::Minus && value.inner.is_int_value()
+                {
                     Some(Value {
                         r#type: value.r#type,
                         inner: self
@@ -144,7 +160,9 @@ impl<'ctx> Codegen<'ctx> {
                             .build_int_neg(value.inner.into_int_value(), "neg")?
                             .into(),
                     })
-                } else if op == Operator::Minus && value.inner.is_float_value() {
+                }
+                else if op == Operator::Minus && value.inner.is_float_value()
+                {
                     Some(Value {
                         r#type: value.r#type,
                         inner: self
@@ -152,16 +170,21 @@ impl<'ctx> Codegen<'ctx> {
                             .build_float_neg(value.inner.into_float_value(), "neg")?
                             .into(),
                     })
-                } else {
+                }
+                else
+                {
                     unreachable!()
                 }
             }
-            Expression::Call { path, args } => {
+            Expression::Call { path, args } =>
+            {
                 let name = path.last().unwrap();
 
                 let runtime = self.runtime.borrow();
 
-                let Some(function) = runtime.functions.get(name) else {
+                let Some(function) = runtime.functions.get(name)
+                else
+                {
                     bail!("Function `{}` not found", name);
                 };
 
@@ -171,7 +194,9 @@ impl<'ctx> Codegen<'ctx> {
                         .enumerate()
                         .map(|(i, e)| {
                             let function = function.borrow();
-                            let Some(decl_type) = function.arguments.get(i) else {
+                            let Some(decl_type) = function.arguments.get(i)
+                            else
+                            {
                                 bail!(
                                     "Function `{}` expects {} arguments",
                                     name,
@@ -179,10 +204,8 @@ impl<'ctx> Codegen<'ctx> {
                                 );
                             };
 
-                            let value = self.gen_non_void_expression(
-                                Some(&Rc::clone(parent_func.unwrap())),
-                                e,
-                            )?;
+                            let value = self
+                                .gen_non_void_expression(&parent_func.as_ref().map(Rc::clone), e)?;
 
                             // TODO we might need the cast everywhere else.. test
                             Ok(self.ref_cast(value, decl_type.1.clone())?.inner.into())
@@ -201,45 +224,55 @@ impl<'ctx> Codegen<'ctx> {
                 condition,
                 block,
                 else_block,
-            } => {
+            } =>
+            {
                 let then = self
                     .ctx
-                    .append_basic_block(parent_func.unwrap().borrow().inner, "then");
+                    .append_basic_block(parent_func.as_ref().unwrap().borrow().inner, "then");
                 let r#else = self
                     .ctx
-                    .append_basic_block(parent_func.unwrap().borrow().inner, "else");
+                    .append_basic_block(parent_func.as_ref().unwrap().borrow().inner, "else");
 
-                let r#continue = if else_block.is_none() {
-                    Some(
-                        self.ctx
-                            .append_basic_block(parent_func.unwrap().borrow().inner, "continue"),
-                    )
-                } else {
+                let r#continue = if else_block.is_none()
+                {
+                    Some(self.ctx.append_basic_block(
+                        parent_func.as_ref().unwrap().borrow().inner,
+                        "continue",
+                    ))
+                }
+                else
+                {
                     None
                 };
 
                 self.builder.position_at_end(then);
 
-                for statement in block {
-                    self.gen_statement(Some(&Rc::clone(parent_func.unwrap())), statement)?;
+                for statement in block
+                {
+                    self.gen_statement(&parent_func.as_ref().map(Rc::clone), statement)?;
                 }
 
-                if let Some(r#continue) = r#continue {
+                if let Some(r#continue) = r#continue
+                {
                     self.builder.build_unconditional_branch(r#continue)?;
                 }
 
                 self.builder.position_at_end(r#else);
 
-                if let Some(r#continue) = r#continue {
+                if let Some(r#continue) = r#continue
+                {
                     self.builder.build_unconditional_branch(r#continue)?;
-                } else {
+                }
+                else
+                {
                     else_block.unwrap().into_iter().try_for_each(|s| {
-                        self.gen_statement(Some(&Rc::clone(parent_func.unwrap())), s)
+                        self.gen_statement(&parent_func.as_ref().map(Rc::clone), s)
                     })?;
                 }
 
                 self.builder.position_at_end(
                     parent_func
+                        .as_ref()
                         .unwrap()
                         .borrow()
                         .inner
@@ -249,7 +282,8 @@ impl<'ctx> Codegen<'ctx> {
 
                 let gen_condition = self.gen_non_void_expression(parent_func, *condition)?;
 
-                if !gen_condition.inner.is_int_value() {
+                if !gen_condition.inner.is_int_value()
+                {
                     bail!("Expected condition, got {:?}", gen_condition.r#type);
                 }
 
@@ -259,11 +293,43 @@ impl<'ctx> Codegen<'ctx> {
                     r#else,
                 )?;
 
-                if let Some(r#continue) = r#continue {
+                if let Some(r#continue) = r#continue
+                {
                     self.builder.position_at_end(r#continue);
                 }
 
-                None
+                None // TODO this is incorrect
+            }
+            Expression::Parenthesis(box e) =>
+            {
+                let value = self.gen_non_void_expression(parent_func, e)?;
+
+                Some(value)
+            }
+            Expression::Tuple(_) =>
+            {
+                // let mapped = eco_vec
+                //     .into_iter()
+                //     .map(|e| Ok(self.gen_non_void_expression(parent_func, e)?.inner))
+                //     .collect::<Result<Vec<_>, _>>()?;
+
+                // let llvm_value = self.ctx.const_struct(mapped.as_slice(), false);
+
+                // let value = Value {
+                //     r#type: Type::Tuple(mapped.iter().map(|v| v.get_type()).collect()),
+                //     inner: llvm_value.into(),
+                // };
+
+                // Some(value)
+                todo!()
+            }
+            Expression::Array(_) =>
+            {
+                // let size = eco_vec.len();
+
+                // self.builder.build_array_alloca();
+
+                todo!()
             }
         })
     }

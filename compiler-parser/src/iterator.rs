@@ -1,48 +1,79 @@
 use std::iter::Peekable;
 
 use compiler_lexer::definitions::{Token, TokenType};
+use ecow::EcoVec;
 use itertools::Itertools;
 
-use crate::{ExhaustiveGet, Statement};
+use crate::{ParserError, Statement};
 
 pub trait TokenItTrait = Iterator<Item = Token> + Clone;
 
 #[derive(Clone)]
 pub struct TokenIt<I: TokenItTrait>(pub Peekable<I>);
 
-impl<I: TokenItTrait> TokenIt<I> {
+pub trait ExhaustiveGet<I: TokenItTrait>: Sized
+{
+    type ParsePredicate = fn(&mut TokenIt<I>) -> Result<Self, ParserError>;
+
+    fn find_predicate(
+        tokens: &mut TokenIt<I>,
+    ) -> Result<fn(&mut TokenIt<I>) -> Result<Self, ParserError>, ParserError>;
+
     #[inline]
-    pub fn ignore_newlines(&mut self) {
+    fn get(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
+    {
+        (Self::find_predicate(&mut tokens.clone())?)(tokens)
+    }
+}
+
+impl<I: TokenItTrait> TokenIt<I>
+{
+    #[inline]
+    pub fn ignore_newlines(&mut self)
+    {
         self.0
-            .peeking_take_while(|t| matches!(t.r#type, TokenType::Newline))
+            .peeking_take_while(|t| matches!(t.r#type, TokenType::Newline)) // TODO switch to this syntax everywhere when `deref_patterns` is usable
             .for_each(drop)
     }
 
     #[inline]
-    pub fn next(&mut self, predicate: impl FnOnce(&Token) -> bool) -> Option<Token> {
+    pub fn next(&mut self, predicate: impl FnOnce(&Token) -> bool) -> Option<Token>
+    {
         self.0.next_if(predicate)
     }
 
-    pub fn parse_generic_list<T>(
+    pub fn consume_generic_list<T: Clone>(
         &mut self,
         (left_bound, right_bound): (&str, &str),
-        predicate: impl Fn(&mut Self) -> Option<T>,
+        predicate: impl Fn(&mut Self) -> Result<T, ParserError>,
         sep_predicate: Option<&str>,
-    ) -> Option<Vec<T>> {
-        self.next(|t| t.value == left_bound)?;
+    ) -> Result<EcoVec<T>, ParserError>
+    {
+        self.next(|t| t.value == left_bound)
+            .ok_or_else(|| ParserError::ExpectedTokenValue {
+                value: left_bound.into(),
+            })?;
 
-        let mut buffer = Vec::new();
+        let mut buffer = EcoVec::new();
 
-        loop {
+        loop
+        {
             self.ignore_newlines();
 
-            if self.next(|t| t.value == right_bound).is_some() {
+            if self.next(|t| t.value == right_bound).is_some()
+            {
                 break;
             }
 
-            if let Some(sep_predicate) = sep_predicate {
-                if !buffer.is_empty() {
-                    self.next(|t| t.value == sep_predicate)?;
+            if let Some(sep_predicate) = sep_predicate
+            {
+                if !buffer.is_empty()
+                {
+                    let Some(_) = self.next(|t| t.value == sep_predicate)
+                    else
+                    {
+                        return Err(ParserError::ExpectedComma);
+                    };
                 }
                 self.ignore_newlines();
             }
@@ -53,11 +84,12 @@ impl<I: TokenItTrait> TokenIt<I> {
             self.ignore_newlines();
         }
 
-        Some(buffer)
+        Ok(buffer)
     }
 
     #[inline]
-    pub fn parse_block(&mut self) -> Option<Vec<Statement>> {
-        self.parse_generic_list(("{", "}"), Statement::get, None)
+    pub fn consume_block(&mut self) -> Result<EcoVec<Statement>, ParserError>
+    {
+        self.consume_generic_list(("{", "}"), Statement::get, None)
     }
 }

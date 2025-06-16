@@ -1,72 +1,125 @@
 use compiler_lexer::definitions::TokenType;
-use ecow::EcoString;
+use ecow::{EcoString, EcoVec};
 use itertools::Itertools;
 
 use crate::{
-    expression::Expression, iterator::TokenItTrait, statement::Statement, ArgumentName,
-    ExhaustiveGet, Name, TokenIt, Type,
+    ArgumentName, Name, ParserError, TokenIt, Type,
+    expression::Expression,
+    iterator::{ExhaustiveGet, TokenItTrait},
+    statement::Statement,
 };
 
-#[derive(Debug)]
-pub struct FunctionSignature {
+#[derive(Debug, PartialEq)]
+pub struct FunctionSignature
+{
     pub name: (EcoString, Option<Type>),
-    pub arguments: Vec<ArgumentName>,
+    pub arguments: EcoVec<ArgumentName>,
 }
 
-#[derive(Debug)]
-pub enum Item {
-    Const {
-        name: Name,
-        value: Expression,
+#[derive(Debug, PartialEq)]
+pub enum Item
+{
+    Const
+    {
+        name: Name, value: Expression
     },
-    Function {
+    Function
+    {
         signature: FunctionSignature,
-        body: Vec<Statement>,
+        body: EcoVec<Statement>,
     },
 }
 
-impl<'a, I: TokenItTrait + 'a> ExhaustiveGet<'a, I> for Item {
-    const PARSE_OPTIONS: &'a [Self::ParsePredicate] = &[Self::parse_const, Self::parse_function];
+impl<I: TokenItTrait> ExhaustiveGet<I> for Item
+{
+    fn find_predicate(tokens: &mut TokenIt<I>) -> Result<Self::ParsePredicate, ParserError>
+    {
+        if tokens.0.peek().is_some_and(|t| t.value == "const")
+        {
+            Ok(Self::parse_const)
+        }
+        else if tokens.0.peek().is_some_and(|t| t.value == "func")
+        {
+            Ok(Self::parse_function)
+        }
+        else
+        {
+            Err(ParserError::ExpectedASTStructure { name: "Item" })
+        }
+    }
 }
 
-impl Item {
-    pub fn parse_const<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        tokens.next(|t| t.value == "const")?;
+impl Item
+{
+    pub fn parse_const<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
+    {
+        tokens
+            .next(|t| t.value == "const")
+            .ok_or(ParserError::ExpectedTokenValue {
+                value: "const".into(),
+            })?;
 
-        let identifier = tokens.next(|t| t.r#type == TokenType::Identifier)?.value;
+        // partially shared on statement.rs. make this better
+        let identifier = tokens
+            .next(|t| t.r#type == TokenType::Identifier)
+            .ok_or(ParserError::ExpectedTokenType {
+                r#type: "Identifier",
+            })?
+            .value;
 
-        let r#type = if tokens.next(|t| t.value == "=").is_none() {
-            Some(Type(
-                tokens
-                    .0
-                    .by_ref()
-                    .take_while(|t| t.value != "=")
-                    .map(|t| t.value)
-                    .collect(),
-            ))
-        } else {
-            None
+        let r#type = {
+            let r#type = tokens
+                .0
+                .peeking_take_while(|t| t.value != "=")
+                .map(|t| t.value)
+                .collect::<Vec<_>>();
+
+            if r#type.is_empty()
+            {
+                None
+            }
+            else
+            {
+                Some(Type(r#type))
+            }
         };
 
         let value = Expression::get(tokens)?;
 
-        tokens.next(|t| t.r#type == TokenType::Newline)?;
+        tokens
+            .next(|t| t.r#type == TokenType::Newline)
+            .ok_or(ParserError::ExpectedNewline)?;
 
-        Some(Self::Const {
+        Ok(Self::Const {
             name: Name(identifier, r#type),
             value,
         })
     }
 
-    pub fn parse_function<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Option<Self> {
-        tokens.next(|t| t.value == "func")?;
+    pub fn parse_function<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
+    {
+        tokens
+            .next(|t| t.value == "func")
+            .ok_or(ParserError::ExpectedTokenValue {
+                value: "func".into(),
+            })?;
 
-        let identifier = tokens.next(|t| t.r#type == TokenType::Identifier)?.value;
+        let identifier = tokens
+            .next(|t| t.r#type == TokenType::Identifier)
+            .ok_or(ParserError::ExpectedTokenType {
+                r#type: "Identifier",
+            })?
+            .value;
 
-        let arguments = tokens.parse_generic_list(
+        let arguments = tokens.consume_generic_list(
             ("(", ")"),
             |t| {
-                let identifier = t.next(|t| t.r#type == TokenType::Identifier)?.value;
+                let identifier = t
+                    .next(|t| t.r#type == TokenType::Identifier)
+                    .ok_or(ParserError::ExpectedTokenType {
+                        r#type: "Identifier",
+                    })?
+                    .value;
 
                 let r#type = Type(
                     t.0.peeking_take_while(|t| t.value != "," && t.value != ")")
@@ -74,24 +127,29 @@ impl Item {
                         .collect(),
                 );
 
-                Some(ArgumentName(identifier, r#type))
+                Ok(ArgumentName(identifier, r#type))
             },
             Some(","),
         )?;
 
-        let r#type = if tokens.0.peek()?.value != "{" {
-            Some(Type(
-                tokens
-                    .0
-                    .peeking_take_while(|t| t.value != "{")
-                    .map(|t| t.value)
-                    .collect(),
-            ))
-        } else {
-            None
+        let r#type = {
+            let r#type = tokens
+                .0
+                .peeking_take_while(|t| t.value != "{")
+                .map(|t| t.value)
+                .collect::<Vec<_>>();
+
+            if r#type.is_empty()
+            {
+                None
+            }
+            else
+            {
+                Some(Type(r#type))
+            }
         };
 
-        let body = tokens.parse_block()?;
+        let body = tokens.consume_block()?;
 
         /* TODO!
         if let Some(ref r#type) = r#type
@@ -108,7 +166,7 @@ impl Item {
         }
         */
 
-        Some(Self::Function {
+        Ok(Self::Function {
             signature: FunctionSignature {
                 name: (identifier, r#type),
                 arguments,
@@ -118,4 +176,4 @@ impl Item {
     }
 }
 
-// TODO finish tests
+// TODO tests

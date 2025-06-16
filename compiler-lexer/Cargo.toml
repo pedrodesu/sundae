@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
-ecow = "0.2.2"
-itertools = "0.13.0"
+dyn-clone = "1.0.19"
+ecow = "0.2.5"
+itertools = "0.14.0"
+snafu = "0.8.5"
 
 [dev-dependencies]
 pretty_assertions = "1"

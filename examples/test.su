@@ -1,10 +1,11 @@
 func op(a i32, b i32) i32 {
-    val c i32 = 9 - 2
-    val d i32 = -(-42 + 2)
+    let c i32 = 9 - 2
+    let d i32 = -(-42 + 2)
 
     ret c + d +a + b
 }
 
 func main() {
-    putd(op(2, 4))
+    std.putd(op(2, 4))
+    std.puts("Hello world!")
 }

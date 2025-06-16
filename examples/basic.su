@@ -3,10 +3,17 @@ func add(a i32, b i32) i32 {
 }
 
 func main() {
-    val a i32 = 40
-    val b i32 = 32
+    let a i32 = 40
+    let b i32 = 32
+    // let b = 32
+    
+    // let b i32
+    // b = 32
 
-    val c i32 = a
+    // let b
+    // b = 32
+
+    let c i32 = a
 
     putd(add(c, b))
 }

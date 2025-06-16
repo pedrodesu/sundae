@@ -1,6 +1,6 @@
 use ecow::EcoString;
 
-const KEYWORDS: &[&str] = &["const", "func", "ret", "if", "mut", "val"];
+const KEYWORDS: &[&str] = &["const", "func", "ret", "if", "mut", "let"];
 
 const OPERATORS: &[&str] = &[
     "and", "or", "+", "-", "*", "/", "+=", "-=", "*=", "/=", "<", ">", "<=", ">=", "==", "!", "!=",
@@ -14,8 +14,13 @@ pub const RUNE_DELIM: char = '`';
 pub const COMMENT_PREFIX: &str = "//";
 pub const COMMENT_PREFIX_LEN: usize = COMMENT_PREFIX.len();
 
+pub const HEX_PREFIX: &str = "0x";
+pub const OCT_PREFIX: &str = "0o";
+pub const BIN_PREFIX: &str = "0b";
+
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum LiteralType {
+pub enum LiteralType
+{
     String,
     Rune,
     Int,
@@ -23,7 +28,8 @@ pub enum LiteralType {
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum TokenType {
+pub enum TokenType
+{
     Keyword,
     Identifier,
     Operator,
@@ -33,60 +39,82 @@ pub enum TokenType {
     Newline,
 }
 
-#[derive(PartialEq, Debug, Clone)]
-pub struct Token {
-    pub value: EcoString,
-    pub r#type: TokenType,
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct Span
+{
+    pub from: (usize, usize),
+    pub to: (usize, usize),
 }
 
-impl TokenType {
+#[derive(PartialEq, Debug, Clone)]
+pub struct Token
+{
+    pub value: EcoString,
+    pub r#type: TokenType,
+    pub span: Span,
+}
+
+impl TokenType
+{
     #[inline]
     fn is_special_fmt_int(
         expression: &str,
         prefix: &str,
         char_predicate: impl Fn(char) -> bool,
-    ) -> bool {
-        if expression.len() <= prefix.len() {
+    ) -> bool
+    {
+        if expression.len() <= prefix.len()
+        {
             false
-        } else {
-            expression
-                .split_at_checked(prefix.len())
-                .map(|e| e.0 == prefix && e.1.chars().all(char_predicate))
-                .unwrap_or_default()
+        }
+        else
+        {
+            let Some((p, rem)) = expression.split_at_checked(prefix.len())
+            else
+            {
+                return false;
+            };
+
+            p == prefix && rem.chars().all(char_predicate)
         }
     }
 
     #[inline]
-    fn is_dec_int(expression: &str) -> bool {
+    fn is_dec_int(expression: &str) -> bool
+    {
         expression.chars().all(|c| c.is_ascii_digit())
     }
 
     #[inline]
-    fn is_hex_int(expression: &str) -> bool {
-        Self::is_special_fmt_int(expression, "0x", |c| c.is_ascii_hexdigit())
+    fn is_hex_int(expression: &str) -> bool
+    {
+        Self::is_special_fmt_int(expression, HEX_PREFIX, |c| c.is_ascii_hexdigit())
     }
 
     #[inline]
-    fn is_oct_int(expression: &str) -> bool {
-        Self::is_special_fmt_int(expression, "0o", |c| matches!(c, '0'..='7'))
+    fn is_oct_int(expression: &str) -> bool
+    {
+        Self::is_special_fmt_int(expression, OCT_PREFIX, |c| matches!(c, '0'..='7'))
     }
 
     #[inline]
-    fn is_bin_int(expression: &str) -> bool {
-        Self::is_special_fmt_int(expression, "0b", |c| matches!(c, '0' | '1'))
+    fn is_bin_int(expression: &str) -> bool
+    {
+        Self::is_special_fmt_int(expression, BIN_PREFIX, |c| matches!(c, '0' | '1'))
     }
 
     #[inline]
-    fn is_float(expression: &str) -> bool {
+    fn is_float(expression: &str) -> bool
+    {
         expression
             .chars()
             .all(|c| matches!(c, '0'..='9' | '-' | '.'))
-            && expression.match_indices('-').map(|v| v.0).sum::<usize>() == 0
             && (expression.matches('.').count() == 1 && !expression.starts_with('.'))
     }
 
     #[inline]
-    fn is_identifier(expression: &str) -> bool {
+    fn is_identifier(expression: &str) -> bool
+    {
         expression
             .chars()
             .all(|c| matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
@@ -94,37 +122,54 @@ impl TokenType {
     }
 
     #[inline]
-    pub fn eval(expr: &str) -> Option<Self> {
-        if KEYWORDS.contains(&expr) {
+    pub fn eval(expr: &str) -> Option<Self>
+    {
+        if KEYWORDS.contains(&expr)
+        {
             Some(TokenType::Keyword)
-        } else if Self::is_identifier(expr) {
+        }
+        else if Self::is_identifier(expr)
+        {
             Some(TokenType::Identifier)
-        } else if Self::is_hex_int(expr)
+        }
+        else if Self::is_hex_int(expr)
             || Self::is_dec_int(expr)
             || Self::is_oct_int(expr)
             || Self::is_bin_int(expr)
         {
             Some(TokenType::Literal(LiteralType::Int))
-        } else if Self::is_float(expr) {
+        }
+        else if Self::is_float(expr)
+        {
             Some(TokenType::Literal(LiteralType::Float))
-        } else if OPERATORS.contains(&expr) {
+        }
+        else if OPERATORS.contains(&expr)
+        {
             Some(TokenType::Operator)
-        } else if SEPARATORS.contains(&expr) {
+        }
+        else if SEPARATORS.contains(&expr)
+        {
             Some(TokenType::Separator)
-        } else if expr == "\n" {
+        }
+        else if expr == "\n"
+        {
             Some(TokenType::Newline)
-        } else {
+        }
+        else
+        {
             None
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    fn hexadecimal_passes() {
+    fn hexadecimal_passes()
+    {
         assert!(TokenType::is_hex_int("0x42069FFFff"));
         assert!(TokenType::is_hex_int("0xffffffffffffffffffffffffffffffff"));
         assert!(TokenType::is_hex_int("0xDEADBEEF"));
@@ -136,7 +181,8 @@ mod tests {
     }
 
     #[test]
-    fn octal_passes() {
+    fn octal_passes()
+    {
         assert!(TokenType::is_oct_int("0o01234567"));
         assert!(TokenType::is_oct_int("0o777"));
 
@@ -147,7 +193,8 @@ mod tests {
     }
 
     #[test]
-    fn binary_passes() {
+    fn binary_passes()
+    {
         assert!(TokenType::is_bin_int("0b000101010010101010101"));
         assert!(TokenType::is_bin_int("0b1010"));
 
@@ -158,7 +205,8 @@ mod tests {
     }
 
     #[test]
-    fn decimal_passes() {
+    fn decimal_passes()
+    {
         assert!(TokenType::is_dec_int("0"));
         assert!(TokenType::is_dec_int("00"));
         assert!(TokenType::is_dec_int("01234"));
@@ -169,7 +217,8 @@ mod tests {
     }
 
     #[test]
-    fn float_passes() {
+    fn float_passes()
+    {
         assert!(TokenType::is_float("12.34"));
         assert!(TokenType::is_float("64."));
         assert!(TokenType::is_float("00."));
@@ -184,7 +233,8 @@ mod tests {
     }
 
     #[test]
-    fn identifier_passes() {
+    fn identifier_passes()
+    {
         assert!(TokenType::is_identifier("abc"));
         assert!(TokenType::is_identifier("abc_def"));
         assert!(TokenType::is_identifier("_abc_"));
