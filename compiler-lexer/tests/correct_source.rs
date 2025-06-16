@@ -394,14 +394,6 @@ fn lexer_passes()
                     from: (10, 0),
                     to: (10, 25)
                 }
-            },
-            Token {
-                value: "\n".into(),
-                r#type: Newline,
-                span: Span {
-                    from: (10, 26),
-                    to: (10, 26)
-                }
             }
         ]),
     );

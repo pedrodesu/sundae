@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 dyn-clone = "1.0.19"
 ecow = "0.2.5"
+either = "1.15.0"
 itertools = "0.14.0"
 snafu = "0.8.5"
 

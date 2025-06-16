@@ -1,8 +1,10 @@
 #![feature(iter_next_chunk)]
+#![feature(iter_intersperse)]
 
 use std::iter::{self, Peekable};
 
 use ecow::{EcoString, EcoVec};
+use either::Either;
 use itertools::Itertools;
 use snafu::prelude::*;
 
@@ -54,7 +56,7 @@ impl Lexer<'_>
             .chain(elements.iter().map(|&(_, c)| c))
             .collect::<EcoString>();
 
-        if !padded_value.ends_with(delim)
+        if elements.is_empty() || !padded_value.ends_with(delim)
         {
             return Some(Err(LexerError::UnclosedDelimiter { delim }));
         }
@@ -177,12 +179,20 @@ impl Iterator for Lexer<'_>
 #[inline(always)]
 pub fn tokenize(input: &'_ str) -> Lexer<'_>
 {
+    let n_lines = input.lines().count();
+
     let base_it = DynClonableIterator::new(Box::new(input.lines().enumerate().flat_map(
-        |(row, line)| {
-            line.chars()
-                .chain(iter::once('\n'))
-                .enumerate()
-                .map(move |(col, c)| ((row, col), c))
+        move |(row, line)| {
+            let it = if n_lines != row + 1
+            {
+                Either::Left(line.chars().chain(std::iter::once('\n')))
+            }
+            else
+            {
+                Either::Right(line.chars())
+            };
+
+            it.enumerate().map(move |(col, c)| ((row, col), c))
         },
     )))
     .peekable();
