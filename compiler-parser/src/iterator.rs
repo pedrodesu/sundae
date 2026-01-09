@@ -39,7 +39,13 @@ impl<I: TokenItTrait> TokenIt<I>
     #[inline]
     pub fn next(&mut self, predicate: impl FnOnce(&Token) -> bool) -> Option<Token>
     {
+        self.0
+            .by_ref()
+            .take_while_ref(|t| t.r#type == TokenType::Newline)
+            .for_each(drop);
+
         self.0.next_if(predicate)
+        // self.0.next_if(predicate)
     }
 
     pub fn consume_generic_list<T: Clone>(

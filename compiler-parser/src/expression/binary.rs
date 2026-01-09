@@ -71,7 +71,7 @@ impl Node
                 ) = operator_stack.last()
                 {
                     let op = to_operator(&t);
-                    let op2 = to_operator(&t2);
+                    let op2 = to_operator(t2);
 
                     if priority(op2) >= priority(op)
                     {

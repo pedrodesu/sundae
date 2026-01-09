@@ -3,9 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail};
 use clap::Parser;
 use compiler_codegen_llvm::Settings;
+use miette::{Context, IntoDiagnostic, Result, bail};
 use mimalloc::MiMalloc;
 
 #[global_allocator]
@@ -55,37 +55,30 @@ fn main() -> Result<()>
     } = Args::parse();
 
     let file = fs::read_to_string(&source)
-        .with_context(|| format!("Couldn't read file from path `{}`", source.display()))?;
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Couldn't read file from path `{}`", source.display()))?;
 
-    let module = source.file_stem().unwrap().to_str().unwrap();
+    let module = source
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .wrap_err("Incorrect file name")?;
 
     let tokens = compiler_lexer::tokenize(&file);
 
-    // tokens.clone().for_each(|t| println!("{:?}", t));
-
-    // TODO this is kinda goofy ngl...................... though this might be our best option. better clone the iterator's state than collect them all into a sizeable vector
-    tokens
-        .clone()
-        .try_for_each(|e| e.map(|_| ()))
-        .context("Lexer failed")?;
+    // TODO Use collect instead. I'd rather allocate more to the heap than run the whole lexer twice lmao
+    tokens.clone().try_for_each(|e| e.map(|_| ()))?;
 
     let ast = compiler_parser::parse(
         tokens
             .flatten()
             .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment),
-    )?;
+    )
+    .into_diagnostic()
+    .wrap_err("Parser failed")?;
 
-    // println!("{ast:#?}");
-
-    compiler_codegen_llvm::gen(
-        module,
-        ast,
-        Settings {
-            ir,
-            opt,
-            output: output.clone(),
-        },
-    )?;
+    compiler_codegen_llvm::r#gen(module, ast, Settings { ir, opt, output }).unwrap();
+    // .into_diagnostic()
+    // .wrap_err("Code generator failed")?;
 
     Ok(())
 }

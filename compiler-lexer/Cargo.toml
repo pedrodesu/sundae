@@ -1,14 +1,14 @@
 [package]
 name = "compiler-lexer"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-dyn-clone = "1.0.19"
-ecow = "0.2.5"
-either = "1.15.0"
+bstr = "1.12.1"
+ecow = "0.2.6"
 itertools = "0.14.0"
-snafu = "0.8.5"
+miette = "7.6.0"
+thiserror = "2.0.17"
 
 [dev-dependencies]
 pretty_assertions = "1"

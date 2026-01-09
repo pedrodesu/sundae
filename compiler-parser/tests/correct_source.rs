@@ -3,11 +3,11 @@ use compiler_parser::{AST, Expression, Item, Name, Statement, Type, item::Functi
 use pretty_assertions::assert_eq;
 
 const SOURCE: &str = r#"func function() {
-    val value mut = 42
-    val float f64 = 2.45
-    val spec u8 = 0b010
-    val a_rune rune
-    val a_str []rune = "bruh"
+    let value mut = 42
+    let float f64 = 2.45
+    let spec u8 = 0b010
+    let a_rune rune
+    let a_str []rune = "bruh"
 
     call(number)
 }

@@ -55,7 +55,7 @@ impl<I: TokenItTrait> ExhaustiveGet<I> for Statement
                 }
             }
 
-            return Err(ParserError::ExpectedASTStructure { name: "Statement" });
+            Err(ParserError::ExpectedASTStructure { name: "Statement" })
         }
     }
 }
@@ -73,8 +73,9 @@ impl Statement
     {
         let value = predicate(tokens)?;
 
-        if let Some(Token {
-            r#type: TokenType::Newline, // TokenType::Separator | TokenType::Newline, // shouldn't we only allow newline here?
+        if let None
+        | Some(Token {
+            r#type: TokenType::Separator | TokenType::Newline,
             ..
         }) = tokens.0.peek()
         {
@@ -96,7 +97,8 @@ impl Statement
                     value: "ret".into(),
                 })?;
 
-            if let Some(Token {
+            if let None
+            | Some(Token {
                 r#type: TokenType::Newline,
                 ..
             }) = tokens.0.peek()
@@ -217,6 +219,11 @@ mod tests
     #[test]
     fn return_passes()
     {
+        println!(
+            "{:#?}",
+            compiler_lexer::tokenize("ret ").collect::<Vec<_>>()
+        );
+
         assert_eq!(
             Statement::parse_return(&mut TokenIt(
                 compiler_lexer::tokenize("ret \n").flatten().peekable()
@@ -226,7 +233,7 @@ mod tests
 
         assert_eq!(
             Statement::parse_return(&mut TokenIt(
-                compiler_lexer::tokenize("ret 42\n").flatten().peekable()
+                compiler_lexer::tokenize("ret 42").flatten().peekable()
             )),
             Ok(Statement::Return(Some(Expression::Literal {
                 value: "42".into(),
@@ -247,8 +254,7 @@ mod tests
     {
         assert_eq!(
             Statement::parse_assign(&mut TokenIt(
-                // Can lhs of an assign expression ever be something else other than a path?
-                compiler_lexer::tokenize("a = 2\n").flatten().peekable()
+                compiler_lexer::tokenize("a = 2").flatten().peekable()
             )),
             Ok(Statement::Assign {
                 destination: Expression::Path(vec!["a".into()].into()),
@@ -261,7 +267,7 @@ mod tests
 
         assert_eq!(
             Statement::parse_assign(&mut TokenIt(
-                compiler_lexer::tokenize("*func_to_ptr() = 42\n")
+                compiler_lexer::tokenize("*func_to_ptr() = 42")
                     .flatten()
                     .peekable()
             )),
@@ -286,7 +292,7 @@ mod tests
     {
         assert_eq!(
             Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let v\n").flatten().peekable()
+                compiler_lexer::tokenize("let v").flatten().peekable()
             )),
             Ok(Statement::Local {
                 mutable: false,

@@ -1,11 +1,11 @@
 [package]
 name = "compiler-codegen-llvm"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
-inkwell = { version = "0.6.0", features = ["llvm18-1-prefer-dynamic"] }
+anyhow = "1.0.100"
+inkwell = { version = "0.8.0", features = ["llvm21-1-prefer-dynamic"] }
 compiler-parser = { path = "../compiler-parser" }
 compiler-lexer = { path = "../compiler-lexer" }
-ecow = "0.2.5"
+ecow = "0.2.6"

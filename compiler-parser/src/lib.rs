@@ -1,5 +1,4 @@
 #![feature(trait_alias)]
-#![feature(let_chains)]
 #![feature(associated_type_defaults)]
 #![feature(box_patterns)]
 // #![feature(deref_patterns)] // https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html // this will make testing much easier!
@@ -19,8 +18,8 @@ pub mod item;
 mod iterator;
 pub mod statement;
 
-// TODO maybe segment this across the multiple modules?
-#[derive(Debug, Snafu, PartialEq)]
+#[derive(Error, Debug, Diagnostic, PartialEq)]
+#[error(transparent)]
 pub enum ParserError
 {
     #[snafu(display("Expected comma"))]

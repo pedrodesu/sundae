@@ -1,5 +1,4 @@
 #![feature(box_patterns)]
-#![feature(let_chains)]
 
 use std::{cell::RefCell, collections::HashMap, fmt, fs, path::PathBuf, process::Command, rc::Rc};
 
@@ -286,7 +285,7 @@ pub struct Codegen<'ctx>
     pub runtime: Rc<RefCell<Runtime<'ctx>>>,
 }
 
-pub fn gen(module: &str, ast: AST, settings: Settings) -> Result<()>
+pub fn r#gen(module: &str, ast: AST, settings: Settings) -> Result<()>
 {
     let ctx = Context::create();
 

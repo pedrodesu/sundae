@@ -1,0 +1,9 @@
+extern inline func putd(d i32)
+{
+    c.printf('%d', d)
+}
+
+extern inline func puts(s []rune)
+{
+    c.printf('%s', s)
+}

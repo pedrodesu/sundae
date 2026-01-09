@@ -1,6 +1,7 @@
 func op(a i32, b i32) i32 {
-    let c i32 = 9 - 2
+    let c i32 = 9 - 2 // TODO ' has no use and fucks everything up. such cases exist. properly catch those
     let d i32 = -(-42 + 2)
+    `\0xF`// TODO make this pass
 
     ret c + d +a + b
 }
