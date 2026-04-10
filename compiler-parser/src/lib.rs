@@ -1,7 +1,6 @@
 #![feature(trait_alias)]
 #![feature(associated_type_defaults)]
 #![feature(box_patterns)]
-// #![feature(deref_patterns)] // https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html // this will make testing much easier!
 
 use std::fmt;
 
@@ -10,8 +9,9 @@ use ecow::EcoString;
 pub use expression::{Expression, binary::Node, operator::Operator};
 pub use item::Item;
 use iterator::{ExhaustiveGet, TokenIt, TokenItTrait};
-use snafu::Snafu;
+use miette::Diagnostic;
 pub use statement::Statement;
+use thiserror::Error;
 
 pub mod expression;
 pub mod item;
@@ -22,31 +22,31 @@ pub mod statement;
 #[error(transparent)]
 pub enum ParserError
 {
-    #[snafu(display("Expected comma"))]
+    #[error("Expected comma")]
     ExpectedComma,
-    #[snafu(display("Expected newline"))]
+    #[error("Expected newline")]
     ExpectedNewline,
-    #[snafu(display("Expected {}", r#type))]
+    #[error("Expected {}", r#type)]
     ExpectedTokenType
     {
         r#type: &'static str
     },
-    #[snafu(display("Expected {}", value))]
+    #[error("Expected {}", value)]
     ExpectedTokenValue
     {
         value: EcoString
     },
-    #[snafu(display("Unexpected token `{:#?}`", token))]
+    #[error("Unexpected token `{:#?}`", token)]
     UnknownToken
     {
         token: Token
     },
-    #[snafu(display("Unknown unary with `{:#?}`", token))]
+    #[error("Unknown unary with `{:#?}`", token)]
     IllegalUnary
     {
         token: Token
     },
-    #[snafu(display("Expected {}", name))]
+    #[error("Expected {}", name)]
     ExpectedASTStructure
     {
         name: &'static str
@@ -58,6 +58,7 @@ pub struct Type(pub Vec<EcoString>);
 
 impl fmt::Display for Type
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
         write!(f, "{}", self.0.join("."))
@@ -73,10 +74,19 @@ pub struct Name(pub EcoString, pub Option<Type>);
 #[derive(Debug, PartialEq)]
 pub struct AST(pub Vec<Item>);
 
-#[inline(always)]
-pub fn parse(input: impl TokenItTrait) -> Result<AST, ParserError>
+pub struct Parser<'s, I: TokenItTrait>
 {
-    let mut iterator = TokenIt(input.peekable());
+    source: &'s [u8],
+    tokens: TokenIt<I>,
+}
+
+#[inline(always)]
+pub fn parse(input: &[u8], tokens: impl TokenItTrait) -> Result<AST, ParserError>
+{
+    let mut parser = Parser {
+        source: input,
+        tokens: TokenIt(tokens.peekable()),
+    };
     let mut items = Vec::new();
 
     while iterator.0.peek().is_some()

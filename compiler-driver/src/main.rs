@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use compiler_codegen_llvm::Settings;
-use miette::{Context, IntoDiagnostic, Result, bail};
+use miette::{Context, IntoDiagnostic, Report, Result, bail};
 use mimalloc::MiMalloc;
 
 #[global_allocator]
@@ -66,9 +66,16 @@ fn main() -> Result<()>
     let tokens = compiler_lexer::tokenize(&file);
 
     // TODO Use collect instead. I'd rather allocate more to the heap than run the whole lexer twice lmao
-    tokens.clone().try_for_each(|e| e.map(|_| ()))?;
+    for event in tokens.clone()
+    {
+        if let compiler_lexer::LexerEvent::Error(error) = event
+        {
+            return Err(Report::new(error).with_source_code(file.clone()));
+        }
+    }
 
     let ast = compiler_parser::parse(
+        file.as_bytes(),
         tokens
             .flatten()
             .filter(|t| t.r#type != compiler_lexer::definitions::TokenType::Comment),
