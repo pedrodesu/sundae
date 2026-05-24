@@ -2,162 +2,145 @@ use compiler_lexer::definitions::{LiteralType, Token, TokenType};
 use ecow::{EcoString, EcoVec};
 use operator::{Operator, to_operator};
 
-use crate::{
-    ParserError, TokenIt,
-    iterator::{ExhaustiveGet, TokenItTrait},
-    statement::Statement,
-};
+use crate::{Parser, ParserError, TokenIt, iterator::ExhaustiveGet, statement::Statement};
 
 pub mod binary;
 pub mod operator;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Expression
-{
-    Literal
-    {
-        value: EcoString,
+pub enum Expression<'s> {
+    Literal {
+        value: &'s [u8],
         r#type: LiteralType,
     },
-    Path(EcoVec<EcoString>),
+    Path(EcoVec<&'s [u8]>),
     Binary(Box<binary::Node>),
-    Unary(Operator, Box<Expression>),
-    Call
-    {
-        path: EcoVec<EcoString>,
-        args: EcoVec<Expression>,
+    Unary(Operator, Box<Expression<'s>>),
+    Call {
+        path: EcoVec<&'s [u8]>,
+        args: EcoVec<Expression<'s>>,
     },
-    If
-    {
-        condition: Box<Expression>,
-        block: EcoVec<Statement>,
-        else_block: Option<EcoVec<Statement>>,
+    If {
+        condition: Box<Expression<'s>>,
+        block: EcoVec<Statement<'s>>,
+        else_block: Option<EcoVec<Statement<'s>>>,
     },
-    Parenthesis(Box<Expression>),
-    Tuple(EcoVec<Expression>),
-    Array(EcoVec<Expression>),
+    Parenthesis(Box<Expression<'s>>),
+    Tuple(EcoVec<Expression<'s>>),
+    Array(EcoVec<Expression<'s>>),
     // TODO Block
 }
 
-impl<I: TokenItTrait> ExhaustiveGet<I> for Expression
-{
-    fn find_predicate(tokens: &mut TokenIt<I>) -> Result<Self::ParsePredicate, ParserError>
-    {
-        let base_predicate = Self::shallow_find_predicate(&mut tokens.clone())?;
+impl<I: TokenIt> ExhaustiveGet<I> for Expression<'_> {
+    fn find_predicate<'s>(
+        parser: &mut Parser<'s, I>,
+    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
+        let base_predicate = Self::shallow_find_predicate(&mut parser.clone())?;
 
-        base_predicate(tokens)?; // Consume whichever base so we can peek ahead
+        base_predicate(parser)?; // Consume whichever base so we can peek ahead
 
-        if tokens
+        if parser
             .0
             .peek()
             .is_some_and(|t| t.r#type == TokenType::Operator)
         {
             Ok(Self::parse_binary)
-        }
-        else
-        {
+        } else {
             Ok(base_predicate)
         }
     }
 }
 
-impl Expression
-{
-    pub fn shallow_find_predicate<I: TokenItTrait>(
-        tokens: &mut TokenIt<I>,
-    ) -> Result<<Expression as ExhaustiveGet<I>>::ParsePredicate, ParserError>
-    {
-        if tokens.0.peek().is_some_and(|t| t.value == "if")
-        {
+impl Expression<'_> {
+    pub fn shallow_find_predicate<I: TokenIt>(
+        parser: &mut Parser<I>,
+    ) -> Result<fn(&mut Parser<'_, I>) -> Result<Self, ParserError>, ParserError> {
+        if parser.peek_value("if") {
             Ok(Self::parse_if)
-        }
-        else if tokens
+        } else if parser
             .0
             .peek()
             .is_some_and(|t| t.r#type == TokenType::Operator)
         {
             Ok(Self::parse_unary)
-        }
-        else if tokens
+        } else if parser
             .0
             .peek()
             .is_some_and(|t| matches!(t.r#type, TokenType::Literal(_)))
         {
             Ok(Self::parse_literal)
-        }
-        else if tokens.0.peek().is_some_and(|t| t.value == "[")
-        {
+        } else if parser.peek_value("[") {
             Ok(Self::parse_array)
-        }
-        else
-        {
+        } else {
             {
-                let mut tokens = tokens.clone();
+                let mut parser = parser.clone();
 
-                if tokens.next(|t| t.value == "(").is_some() && Expression::get(&mut tokens).is_ok()
-                {
+                if parser.consume_value("(").is_some() && parser.get_expression().is_ok() {
                     // TODO this won't work properly with a leading colon, as probably other things won't either. make a decision on this
-                    if tokens.0.peek().is_some_and(|t| t.value == ")")
-                    {
+                    if parser.peek_value(")") {
                         return Ok(Self::parse_parenthesis);
-                    }
-                    else
-                    {
+                    } else {
                         return Ok(Self::parse_tuple);
                     }
                 }
             }
 
             {
-                let mut tokens = tokens.clone();
+                let mut parser = parser.clone();
 
-                if Self::parse_path(&mut tokens).is_ok()
-                {
-                    if tokens.0.peek().is_some_and(|t| t.value == "(")
-                    {
+                if Self::parse_path(&mut parser).is_ok() {
+                    if parser.peek_value("(") {
                         return Ok(Self::parse_call);
-                    }
-                    else
-                    {
+                    } else {
                         return Ok(Self::parse_path);
                     }
                 }
             }
 
-            Err(ParserError::ExpectedASTStructure { name: "Expression" })
+            Err(ParserError::ExpectedASTStructure {
+                span: parser.current_span(),
+                name: "Expression",
+            })
         }
     }
 
     #[inline]
-    pub fn parse_literal(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        let Token {
-            value,
+    pub fn parse_literal<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        let t @ Token {
             r#type: TokenType::Literal(lit_type),
             ..
-        } = tokens
-            .next(|t| matches!(t.r#type, TokenType::Literal(_)))
-            .ok_or(ParserError::ExpectedTokenType { r#type: "Literal" })?
-        else
-        {
+        } = parser
+            .next(|t| {
+                matches!(
+                    t,
+                    Token {
+                        r#type: TokenType::Literal(_),
+                        ..
+                    }
+                )
+            })
+            .ok_or(ParserError::ExpectedTokenType {
+                span: parser.current_span(),
+                r#type: "Literal",
+            })?
+        else {
             unreachable!()
         };
 
         Ok(Self::Literal {
-            value,
+            value: parser.token_value(&t),
             r#type: lit_type,
         })
     }
 
-    pub fn parse_path(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
+    pub fn parse_path<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
         let mut path = EcoVec::new();
 
-        while path.is_empty() || tokens.next(|t| t.value == ".").is_some()
-        {
-            let segment = tokens
+        while path.is_empty() || parser.consume_value(".").is_some() {
+            let segment = parser
                 .next(|t| t.r#type == TokenType::Identifier)
                 .ok_or(ParserError::ExpectedTokenType {
+                    span: parser.current_span(),
                     r#type: "Identifier",
                 })?
                 .value;
@@ -168,62 +151,47 @@ impl Expression
     }
 
     #[inline]
-    pub fn parse_binary(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        println!("parse_binary");
+    pub fn parse_binary<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
         // TODO RPN should prolly be bettered.
-        let node = binary::Node::parse(tokens)?;
-        println!("parse_binary_end");
+        let node = binary::Node::parse(parser)?;
 
         Ok(Self::Binary(Box::new(node)))
     }
 
-    pub fn parse_call(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        let Self::Path(path) = Self::parse_path(tokens)?
-        else
-        {
+    pub fn parse_call<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        let Self::Path(path) = Self::parse_path(parser)? else {
             unreachable!()
         };
 
-        let args = tokens.consume_generic_list(("(", ")"), Expression::get, Some(","))?;
+        let args = parser.consume_list(("(", ")"), Expression::get, Some(","))?;
 
         Ok(Self::Call { path, args })
     }
 
-    pub fn parse_if(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        tokens
-            .next(|t| t.value == "if")
-            .ok_or(ParserError::ExpectedTokenValue { value: "if".into() })?;
+    pub fn parse_if<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        parser
+            .consume_value("if")
+            .ok_or(ParserError::ExpectedTokenValue {
+                span: parser.current_span(),
+                value: "if".into(),
+            })?;
 
         // TODO ignore_newlines might not be necessary? if when we get next we always skip newline. is this viable? try and test.
-        tokens.ignore_newlines();
+        parser.ignore_newlines();
 
-        println!("0");
+        let condition = parser.next_expression()?;
 
-        let condition = Expression::get(tokens)?;
+        parser.ignore_newlines();
 
-        println!("1");
+        let block = parser.consume_block()?;
 
-        tokens.ignore_newlines();
+        parser.ignore_newlines();
 
-        println!("2");
+        let r#else = if parser.consume_value("else").is_some() {
+            parser.ignore_newlines();
 
-        let block = tokens.consume_block()?;
-
-        println!("3");
-
-        tokens.ignore_newlines();
-
-        let r#else = if tokens.next(|t| t.value == "else").is_some()
-        {
-            tokens.ignore_newlines();
-
-            Some(tokens.consume_block()?)
-        }
-        else
-        {
+            Some(parser.consume_block()?)
+        } else {
             None
         };
 
@@ -234,41 +202,57 @@ impl Expression
         })
     }
 
-    pub fn parse_unary(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        let operator = tokens
-            .next(|t| t.r#type == TokenType::Operator)
-            .ok_or(ParserError::ExpectedTokenType { r#type: "Operator" })?;
-        let operator @ (Operator::Minus | Operator::Star) = to_operator(&operator)
-        else
-        {
-            return Err(ParserError::IllegalUnary { token: operator });
+    pub fn parse_unary<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        let operator = parser
+            .next(|t| {
+                matches!(
+                    t,
+                    Token {
+                        r#type: TokenType::Operator,
+                        ..
+                    }
+                )
+            })
+            .ok_or(ParserError::ExpectedTokenType {
+                span: parser.current_span(),
+                r#type: "Operator",
+            })?;
+        let operator @ (Operator::Minus | Operator::Star) = to_operator(&operator, parser.source)
+        else {
+            return Err(ParserError::IllegalUnary {
+                span: parser.current_span(),
+                token: operator,
+            });
         };
 
-        let e = Expression::get(tokens)?;
+        let e = parser.next_expression()?;
 
         Ok(Self::Unary(operator, Box::new(e)))
     }
 
-    pub fn parse_parenthesis(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        tokens
-            .next(|t| t.value == "(")
-            .ok_or(ParserError::ExpectedTokenValue { value: "(".into() })?;
+    pub fn parse_parenthesis<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        parser
+            .consume_value("(")
+            .ok_or(ParserError::ExpectedTokenValue {
+                span: parser.current_span(),
+                value: "(".into(),
+            })?;
 
-        let e = Expression::get(tokens)?;
+        let e = parser.next_expression()?;
 
-        tokens
-            .next(|t| t.value == ")")
-            .ok_or(ParserError::ExpectedTokenValue { value: ")".into() })?;
+        parser
+            .consume_value(")")
+            .ok_or(ParserError::ExpectedTokenValue {
+                span: parser.current_span(),
+                value: ")".into(),
+            })?;
 
         Ok(Self::Parenthesis(Box::new(e)))
     }
 
     #[inline]
-    pub fn parse_tuple(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        Ok(Self::Tuple(tokens.consume_generic_list(
+    pub fn parse_tuple<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        Ok(Self::Tuple(parser.consume_list(
             ("(", ")"),
             Expression::get,
             Some(","),
@@ -276,9 +260,8 @@ impl Expression
     }
 
     #[inline]
-    pub fn parse_array(tokens: &mut TokenIt<impl TokenItTrait>) -> Result<Self, ParserError>
-    {
-        Ok(Self::Array(tokens.consume_generic_list(
+    pub fn parse_array<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        Ok(Self::Array(parser.consume_list(
             ("[", "]"),
             Expression::get,
             Some(","),
@@ -287,8 +270,7 @@ impl Expression
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use compiler_lexer::definitions::Span;
     use pretty_assertions::assert_eq;
 
@@ -298,8 +280,7 @@ mod tests
     // Expression::Literal and Expression::Binary are mere simple wrappers for already tested features, so we don't test them here
 
     #[test]
-    fn path_passes()
-    {
+    fn path_passes() {
         assert_eq!(
             Expression::parse_path(&mut TokenIt(
                 compiler_lexer::tokenize("a.path.to").flatten().peekable()
@@ -311,8 +292,7 @@ mod tests
     }
 
     #[test]
-    fn call_passes()
-    {
+    fn call_passes() {
         assert_eq!(
             Expression::parse_call(&mut TokenIt(
                 compiler_lexer::tokenize("call_me(     )")
@@ -543,8 +523,7 @@ mod tests
     // }
 
     #[test]
-    fn unary_passes()
-    {
+    fn unary_passes() {
         assert_eq!(
             Expression::parse_unary(&mut TokenIt(
                 compiler_lexer::tokenize("-2").flatten().peekable()

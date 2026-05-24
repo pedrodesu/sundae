@@ -2,10 +2,9 @@ use compiler_lexer::{
     LexerEvent,
     definitions::{LiteralType::*, TokenType::*},
 };
-use itertools::{Either, Itertools};
 use pretty_assertions::assert_eq;
 
-const SOURCE: &str = r#"func function() {
+const SOURCE: &[u8] = r#"func function() {
         let value = 42 // comment
         let float f64 = 2.45
         let spec u8 = 0b010
@@ -15,67 +14,71 @@ const SOURCE: &str = r#"func function() {
         call(number)
     }
 
-    // this is another comment"#;
+    // this is another comment"#
+    .as_bytes();
 
 #[test]
-fn lexer_passes()
-{
-    let (tokens, errors) = compiler_lexer::tokenize(SOURCE)
-        .partition_map::<Vec<_>, Vec<_>, _, _, _>(|e| match e
-        {
-            LexerEvent::Token(token) => Either::Left((token.span.source(SOURCE), token.r#type)),
-            LexerEvent::Error(error) => Either::Right(error),
-        });
+fn lexer_passes() {
+    let (tokens, errors) = compiler_lexer::tokenize(SOURCE).fold(
+        (Vec::new(), Vec::new()),
+        |(mut tokens, mut errors), e| {
+            match e {
+                LexerEvent::Token(t) => tokens.push((t.span.source(SOURCE), t.r#type)),
+                LexerEvent::Error(err) => errors.push(err),
+            }
+            (tokens, errors)
+        },
+    );
 
     assert_eq!(
         tokens,
         [
-            ("func", Keyword),
-            ("function", Identifier),
-            ("(", Separator),
-            (")", Separator),
-            ("{", Separator),
-            ("\n", Newline),
-            ("let", Keyword),
-            ("value", Identifier),
-            ("=", Separator),
-            ("42", Literal(Int)),
-            ("// comment", Comment),
-            ("\n", Newline),
-            ("let", Keyword),
-            ("float", Identifier),
-            ("f64", Identifier),
-            ("=", Separator),
-            ("2.45", Literal(Float)),
-            ("\n", Newline),
-            ("let", Keyword),
-            ("spec", Identifier),
-            ("u8", Identifier),
-            ("=", Separator),
-            ("0b010", Literal(Int)),
-            ("\n", Newline),
-            ("let", Keyword),
-            ("a_rune", Identifier),
-            ("rune", Identifier),
-            ("\n", Newline),
-            ("let", Keyword),
-            ("a_str", Identifier),
-            ("[", Separator),
-            ("]", Separator),
-            ("rune", Identifier),
-            ("=", Separator),
-            ("\"bruh\"", Literal(String)),
-            ("\n", Newline),
-            ("\n", Newline),
-            ("call", Identifier),
-            ("(", Separator),
-            ("number", Identifier),
-            (")", Separator),
-            ("\n", Newline),
-            ("}", Separator),
-            ("\n", Newline),
-            ("\n", Newline),
-            ("// this is another comment", Comment)
+            (b"func" as &[u8], Keyword),
+            (b"function", Identifier),
+            (b"(", Separator),
+            (b")", Separator),
+            (b"{", Separator),
+            (b"\n", Newline),
+            (b"let", Keyword),
+            (b"value", Identifier),
+            (b"=", Separator),
+            (b"42", Literal(Int)),
+            (b"// comment", Comment),
+            (b"\n", Newline),
+            (b"let", Keyword),
+            (b"float", Identifier),
+            (b"f64", Identifier),
+            (b"=", Separator),
+            (b"2.45", Literal(Float)),
+            (b"\n", Newline),
+            (b"let", Keyword),
+            (b"spec", Identifier),
+            (b"u8", Identifier),
+            (b"=", Separator),
+            (b"0b010", Literal(Int)),
+            (b"\n", Newline),
+            (b"let", Keyword),
+            (b"a_rune", Identifier),
+            (b"rune", Identifier),
+            (b"\n", Newline),
+            (b"let", Keyword),
+            (b"a_str", Identifier),
+            (b"[", Separator),
+            (b"]", Separator),
+            (b"rune", Identifier),
+            (b"=", Separator),
+            (b"\"bruh\"", Literal(String)),
+            (b"\n", Newline),
+            (b"\n", Newline),
+            (b"call", Identifier),
+            (b"(", Separator),
+            (b"number", Identifier),
+            (b")", Separator),
+            (b"\n", Newline),
+            (b"}", Separator),
+            (b"\n", Newline),
+            (b"\n", Newline),
+            (b"// this is another comment", Comment)
         ]
     );
 

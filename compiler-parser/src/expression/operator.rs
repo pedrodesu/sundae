@@ -3,8 +3,7 @@ use std::fmt;
 use compiler_lexer::definitions::{Token, TokenType};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Operator
-{
+pub enum Operator {
     Plus,
     Minus,
     Star,
@@ -48,22 +47,19 @@ const OPERATOR_MAP: &[(&str, Operator)] = {
     ]
 };
 
-pub fn to_operator(token: &Token) -> Operator
-{
+pub fn to_operator(token: &Token, source: &[u8]) -> Operator {
     assert_eq!(token.r#type, TokenType::Operator, "Token isn't an operator");
 
     OPERATOR_MAP
         .iter()
         .copied()
-        .find(|&(k, _)| k == token.value)
+        .find(|&(k, _)| k == token.value(source))
         .unwrap()
         .1
 }
 
-impl fmt::Display for Operator
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-    {
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",

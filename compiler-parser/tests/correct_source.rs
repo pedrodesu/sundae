@@ -14,8 +14,7 @@ const SOURCE: &str = r#"func function() {
 "#;
 
 #[test]
-fn parser_passes()
-{
+fn parser_passes() {
     assert_eq!(
         compiler_parser::parse(compiler_lexer::tokenize(SOURCE).flatten()),
         Ok(AST(vec![Item::Function {

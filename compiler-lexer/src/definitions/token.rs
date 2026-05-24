@@ -1,8 +1,7 @@
 use super::Span;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub enum LiteralType
-{
+pub enum LiteralType {
     String,
     Rune,
     Int,
@@ -10,8 +9,7 @@ pub enum LiteralType
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub enum TokenType
-{
+pub enum TokenType {
     Keyword,
     Identifier,
     Operator,
@@ -22,8 +20,19 @@ pub enum TokenType
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub struct Token
-{
+pub struct Token {
     pub r#type: TokenType,
     pub span: Span,
+}
+
+impl Token {
+    #[inline]
+    pub fn value<'a>(&self, source: &'a [u8]) -> &'a [u8] {
+        self.span.source(source)
+    }
+
+    #[inline]
+    pub fn is_value(&self, source: &[u8], value: &str) -> bool {
+        self.value(source) == value.as_bytes()
+    }
 }

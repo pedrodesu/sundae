@@ -2,42 +2,45 @@ use compiler_lexer::{
     LexerError, LexerEvent,
     definitions::{LiteralType::*, TokenType::*},
 };
-use itertools::{Either, Itertools};
 use pretty_assertions::assert_eq;
 
-const SOURCE: &str = r#"func abc() {
+const SOURCE: &[u8] = r#"func abc() {
         call(42)
         »
     }
-    "#;
+    "#
+.as_bytes();
 
 #[test]
-fn invalid_token()
-{
-    let (tokens, errors) = compiler_lexer::tokenize(SOURCE)
-        .partition_map::<Vec<_>, Vec<_>, _, _, _>(|e| match e
-        {
-            LexerEvent::Token(token) => Either::Left((token.span.source(SOURCE), token.r#type)),
-            LexerEvent::Error(error) => Either::Right(error),
-        });
+fn invalid_token() {
+    let (tokens, errors) = compiler_lexer::tokenize(SOURCE).fold(
+        (Vec::new(), Vec::new()),
+        |(mut tokens, mut errors), e| {
+            match e {
+                LexerEvent::Token(t) => tokens.push((t.span.source(SOURCE), t.r#type)),
+                LexerEvent::Error(err) => errors.push(err),
+            }
+            (tokens, errors)
+        },
+    );
 
     assert_eq!(
         tokens,
         [
-            ("func", Keyword),
-            ("abc", Identifier),
-            ("(", Separator),
-            (")", Separator),
-            ("{", Separator),
-            ("\n", Newline),
-            ("call", Identifier),
-            ("(", Separator),
-            ("42", Literal(Int)),
-            (")", Separator),
-            ("\n", Newline),
-            ("\n", Newline),
-            ("}", Separator),
-            ("\n", Newline),
+            (b"func" as &[u8], Keyword),
+            (b"abc", Identifier),
+            (b"(", Separator),
+            (b")", Separator),
+            (b"{", Separator),
+            (b"\n", Newline),
+            (b"call", Identifier),
+            (b"(", Separator),
+            (b"42", Literal(Int)),
+            (b")", Separator),
+            (b"\n", Newline),
+            (b"\n", Newline),
+            (b"}", Separator),
+            (b"\n", Newline),
         ],
     );
 

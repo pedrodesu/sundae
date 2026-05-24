@@ -2,60 +2,49 @@ use compiler_lexer::definitions::{Token, TokenType};
 use itertools::Itertools;
 
 use crate::{
-    Name, ParserError, TokenIt, Type,
-    expression::Expression,
-    iterator::{ExhaustiveGet, TokenItTrait},
+    Name, Parser, ParserError, TokenIt, Type, expression::Expression, iterator::ExhaustiveGet,
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Statement
-{
-    Return(Option<Expression>),
-    Expression(Expression),
+pub enum Statement<'s> {
+    Return(Option<Expression<'s>>),
+    Expression(Expression<'s>),
     // TODO add another field here. identify and refactor operator assign exprs such as +=
-    Assign
-    {
-        destination: Expression,
-        source: Expression,
+    Assign {
+        destination: Expression<'s>,
+        source: Expression<'s>,
     },
-    Local
-    {
+    Local {
         mutable: bool,
-        name: Name,
-        init: Option<Expression>,
+        name: Name<'s>,
+        init: Option<Expression<'s>>,
     },
 }
 
-impl<I: TokenItTrait> ExhaustiveGet<I> for Statement
-{
-    fn find_predicate(tokens: &mut TokenIt<I>) -> Result<Self::ParsePredicate, ParserError>
-    {
-        if tokens.0.peek().is_some_and(|t| t.value == "ret")
-        {
+impl<I: TokenIt> ExhaustiveGet<I> for Statement<'_> {
+    fn find_predicate<'s>(
+        parser: &mut Parser<'s, I>,
+    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
+        if parser.peek_value("ret") {
             Ok(Self::parse_return)
-        }
-        else if tokens.0.peek().is_some_and(|t| t.value == "let")
-        {
+        } else if parser.peek_value("let") {
             Ok(Self::parse_local)
-        }
-        else
-        {
+        } else {
             {
-                let mut tokens = tokens.clone();
-                if Expression::get(&mut tokens).is_ok()
-                {
-                    if tokens.next(|t| t.value == "=").is_some()
-                    {
+                let mut parser = parser.clone();
+                if parser.next_expression().is_ok() {
+                    if parser.consume_value("=").is_some() {
                         return Ok(Self::parse_assign);
-                    }
-                    else
-                    {
+                    } else {
                         return Ok(Self::parse_expression);
                     }
                 }
             }
 
-            Err(ParserError::ExpectedASTStructure { name: "Statement" })
+            Err(ParserError::ExpectedASTStructure {
+                span: parser.current_span(),
+                name: "Statement",
+            })
         }
     }
 }
@@ -63,51 +52,47 @@ impl<I: TokenItTrait> ExhaustiveGet<I> for Statement
 // TODO implement concrete error types for everything that may fuck up
 // also make error handling more proper with line and col and what not
 
-impl Statement
-{
+impl<'s> Statement<'s> {
     #[inline]
-    fn assert_end<I: TokenItTrait>(
-        tokens: &mut TokenIt<I>,
-        predicate: impl FnOnce(&mut TokenIt<I>) -> Result<Self, ParserError>,
-    ) -> Result<Self, ParserError>
-    {
-        let value = predicate(tokens)?;
+    fn assert_end<I: TokenIt>(
+        parser: &mut Parser<'s, I>,
+        predicate: impl FnOnce(&mut Parser<'s, I>) -> Result<Self, ParserError>,
+    ) -> Result<Self, ParserError> {
+        let value = predicate(parser)?;
 
         if let None
         | Some(Token {
             r#type: TokenType::Separator | TokenType::Newline,
             ..
-        }) = tokens.0.peek()
+        }) = parser.tokens.peek()
         {
             Ok(value)
-        }
-        else
-        {
-            Err(ParserError::ExpectedNewline)
+        } else {
+            Err(ParserError::ExpectedNewline {
+                span: parser.current_span(),
+            })
         }
     }
 
     #[inline]
-    pub fn parse_return<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
-    {
-        Self::assert_end(tokens, |tokens| {
-            tokens
-                .next(|t| t.value == "ret")
+    pub fn parse_return<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
+        Self::assert_end(parser, |parser| {
+            parser
+                .consume_value("ret")
                 .ok_or(ParserError::ExpectedTokenValue {
-                    value: "ret".into(),
+                    span: parser.current_span(),
+                    value: "ret",
                 })?;
 
             if let None
             | Some(Token {
                 r#type: TokenType::Newline,
                 ..
-            }) = tokens.0.peek()
+            }) = parser.tokens.peek()
             {
                 Ok(Self::Return(None))
-            }
-            else
-            {
-                let e = Expression::get(tokens)?;
+            } else {
+                let e = Expression::get(parser)?;
 
                 Ok(Self::Return(Some(e)))
             }
@@ -124,23 +109,24 @@ impl Statement
     }
 
     #[inline]
-    pub fn parse_expression<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
-    {
-        Self::assert_end(tokens, |tokens| {
-            Ok(Self::Expression(Expression::get(tokens)?))
+    pub fn parse_expression<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
+        Self::assert_end(parser, |parser| {
+            Ok(Self::Expression(Expression::get(parser)?))
         })
     }
 
-    pub fn parse_assign<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
-    {
-        Self::assert_end(tokens, |tokens| {
-            let destination = Expression::get(tokens)?;
+    pub fn parse_assign<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
+        Self::assert_end(parser, |parser| {
+            let destination = Expression::get(parser)?;
 
-            tokens
-                .next(|t| t.value == "=")
-                .ok_or(ParserError::ExpectedTokenValue { value: "=".into() })?;
+            parser
+                .consume_value("=")
+                .ok_or(ParserError::ExpectedTokenValue {
+                    span: parser.current_span(),
+                    value: "=",
+                })?;
 
-            let source = Expression::get(tokens)?;
+            let source = Expression::get(parser)?;
 
             Ok(Self::Assign {
                 destination,
@@ -149,50 +135,56 @@ impl Statement
         })
     }
 
-    pub fn parse_local<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
-    {
-        Self::assert_end(tokens, |tokens| {
-            tokens
-                .next(|t| t.value == "let")
+    pub fn parse_local<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
+        Self::assert_end(parser, |parser| {
+            parser
+                .consume_value("let")
                 .ok_or(ParserError::ExpectedTokenValue {
-                    value: "let".into(),
+                    span: parser.current_span(),
+                    value: "let",
                 })?;
 
-            let identifier = tokens
-                .next(|t| t.r#type == TokenType::Identifier)
-                .ok_or(ParserError::ExpectedTokenType {
-                    r#type: "Identifier",
-                })?
-                .value;
+            let identifier = {
+                let token = parser
+                    .consume(|t| {
+                        matches!(
+                            t,
+                            Token {
+                                r#type: TokenType::Identifier,
+                                ..
+                            }
+                        )
+                    })
+                    .ok_or(ParserError::ExpectedTokenType {
+                        span: parser.current_span(),
+                        r#type: "Identifier",
+                    })?;
+                parser.token_value(&token)
+            };
 
-            let mutable = tokens.next(|t| t.value == "mut").is_some();
+            let mutable = parser.consume_value("mut").is_some();
 
             // shouldn't mut always only be intrinsic to the type?
             // No. a variable can be mutable. a type does not have this qualification. a pointer, however, may or may not be mutable.
 
             let r#type = {
-                let r#type = tokens
-                    .0
-                    .peeking_take_while(|t| t.value != "=" && t.r#type != TokenType::Newline)
-                    .map(|t| t.value)
+                let source = parser.source;
+                let r#type = parser
+                    .tokens
+                    .peeking_take_while(|t| !t.is_value(source, "=") && t.r#type != TokenType::Newline)
+                    .map(|t| t.value(source))
                     .collect::<Vec<_>>();
 
-                if r#type.is_empty()
-                {
+                if r#type.is_empty() {
                     None
-                }
-                else
-                {
+                } else {
                     Some(Type(r#type))
                 }
             };
 
-            let init = if tokens.next(|t| t.value == "=").is_some()
-            {
-                Some(Expression::get(tokens)?)
-            }
-            else
-            {
+            let init = if parser.consume_value("=").is_some() {
+                Some(Expression::get(parser)?)
+            } else {
                 None
             };
 
@@ -206,81 +198,74 @@ impl Statement
 }
 
 #[cfg(test)]
-mod tests
-{
-    use compiler_lexer::definitions::LiteralType;
+mod tests {
+    use compiler_lexer::{LexerEvent, definitions::LiteralType};
     use pretty_assertions::assert_eq;
 
     use super::*;
     use crate::Operator;
 
+    fn parser(source: &str) -> Parser<'_, impl TokenIt> {
+        Parser::new(
+            source,
+            compiler_lexer::tokenize(source).map(|event| match event {
+                LexerEvent::Token(token) => token,
+                LexerEvent::Error(err) => panic!("lexer error: {err:?}"),
+            }),
+        )
+    }
+
     // Statement::parse_expression is just a struct wrapper for an already tested function, so we don't test it here
 
     #[test]
-    fn return_passes()
-    {
-        println!(
-            "{:#?}",
-            compiler_lexer::tokenize("ret ").collect::<Vec<_>>()
-        );
-
+    fn return_passes() {
         assert_eq!(
-            Statement::parse_return(&mut TokenIt(
-                compiler_lexer::tokenize("ret \n").flatten().peekable()
-            )),
+            Statement::parse_return(&mut parser("ret \n")),
             Ok(Statement::Return(None))
         );
 
         assert_eq!(
-            Statement::parse_return(&mut TokenIt(
-                compiler_lexer::tokenize("ret 42").flatten().peekable()
-            )),
+            Statement::parse_return(&mut parser("ret 42")),
             Ok(Statement::Return(Some(Expression::Literal {
-                value: "42".into(),
+                value: "42".as_bytes(),
                 r#type: LiteralType::Int
             })))
         );
 
         assert_eq!(
-            Statement::parse_return(&mut TokenIt(
-                compiler_lexer::tokenize("ret ret\n\n").flatten().peekable()
-            )),
-            Err(ParserError::ExpectedASTStructure { name: "Expression" })
+            Statement::parse_return(&mut parser("ret ret\n\n")),
+            Err(ParserError::ExpectedASTStructure {
+                name: "Expression",
+                span: (3..5).into()
+            })
         );
     }
 
     #[test]
-    fn assign_passes()
-    {
+    fn assign_passes() {
         assert_eq!(
-            Statement::parse_assign(&mut TokenIt(
-                compiler_lexer::tokenize("a = 2").flatten().peekable()
-            )),
+            Statement::parse_assign(&mut parser("a = 2")),
             Ok(Statement::Assign {
-                destination: Expression::Path(vec!["a".into()].into()),
+                destination: Expression::Path(vec!["a".as_bytes()].into()),
                 source: Expression::Literal {
-                    value: "2".into(),
+                    value: "2".as_bytes(),
                     r#type: LiteralType::Int
                 }
             })
         );
 
         assert_eq!(
-            Statement::parse_assign(&mut TokenIt(
-                compiler_lexer::tokenize("*func_to_ptr() = 42")
-                    .flatten()
-                    .peekable()
-            )),
+            Statement::parse_assign(&mut parser("*func_to_ptr() = 42")),
             Ok(Statement::Assign {
                 destination: Expression::Unary(
                     Operator::Star,
                     Box::new(Expression::Call {
-                        path: vec!["func_to_ptr".into()].into(),
+                        path: vec!["func_to_ptr".as_bytes()].into(),
                         args: vec![].into()
                     })
                 ),
                 source: Expression::Literal {
-                    value: "42".into(),
+                    value: "42".as_bytes(),
                     r#type: LiteralType::Int
                 }
             })
@@ -288,84 +273,68 @@ mod tests
     }
 
     #[test]
-    fn local_passes()
-    {
+    fn local_passes() {
         assert_eq!(
-            Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let v").flatten().peekable()
-            )),
+            Statement::parse_local(&mut parser("let v")),
             Ok(Statement::Local {
                 mutable: false,
-                name: Name("v".into(), None),
+                name: Name("v".as_bytes(), None),
                 init: None,
             })
         );
 
         assert_eq!(
-            Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let a = 2\n").flatten().peekable()
-            )),
+            Statement::parse_local(&mut parser("let a = 2\n")),
             Ok(Statement::Local {
                 mutable: false,
-                name: Name("a".into(), None),
+                name: Name("a".as_bytes(), None),
                 init: Some(Expression::Literal {
-                    value: "2".into(),
+                    value: "2".as_bytes(),
                     r#type: LiteralType::Int
                 })
             })
         );
 
         assert_eq!(
-            Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let b i32 = 4\n")
-                    .flatten()
-                    .peekable()
-            )),
+            Statement::parse_local(&mut parser("let b i32 = 4\n")),
             Ok(Statement::Local {
                 mutable: false,
-                name: Name("b".into(), Some(Type(vec!["i32".into()]))),
+                name: Name("b".as_bytes(), Some(Type(vec!["i32".as_bytes()]))),
                 init: Some(Expression::Literal {
-                    value: "4".into(),
+                    value: "4".as_bytes(),
                     r#type: LiteralType::Int
                 })
             })
         );
 
         assert_eq!(
-            Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let b i32\n").flatten().peekable()
-            )),
+            Statement::parse_local(&mut parser("let b i32\n")),
             Ok(Statement::Local {
                 mutable: false,
-                name: Name("b".into(), Some(Type(vec!["i32".into()]))),
+                name: Name("b".as_bytes(), Some(Type(vec!["i32".as_bytes()]))),
                 init: None
             })
         );
 
         assert_eq!(
-            Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let c *i32\n")
-                    .flatten()
-                    .peekable()
-            )),
-            Ok(Statement::Local {
-                mutable: false,
-                name: Name("c".into(), Some(Type(vec!["*".into(), "i32".into()]))),
-                init: None
-            })
-        );
-
-        assert_eq!(
-            Statement::parse_local(&mut TokenIt(
-                compiler_lexer::tokenize("let s []i32\n")
-                    .flatten()
-                    .peekable()
-            )),
+            Statement::parse_local(&mut parser("let c *i32\n")),
             Ok(Statement::Local {
                 mutable: false,
                 name: Name(
-                    "s".into(),
-                    Some(Type(vec!["[".into(), "]".into(), "i32".into()]))
+                    "c".as_bytes(),
+                    Some(Type(vec!["*".as_bytes(), "i32".as_bytes()]))
+                ),
+                init: None
+            })
+        );
+
+        assert_eq!(
+            Statement::parse_local(&mut parser("let s []i32\n")),
+            Ok(Statement::Local {
+                mutable: false,
+                name: Name(
+                    "s".as_bytes(),
+                    Some(Type(vec!["[".as_bytes(), "]".as_bytes(), "i32".as_bytes()]))
                 ),
                 init: None
             })

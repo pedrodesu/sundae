@@ -1,94 +1,88 @@
-use compiler_lexer::definitions::TokenType;
-use ecow::{EcoString, EcoVec};
+use compiler_lexer::definitions::{Token, TokenType};
+use ecow::EcoVec;
 use itertools::Itertools;
 
 use crate::{
-    ArgumentName, Name, ParserError, TokenIt, Type,
-    expression::Expression,
-    iterator::{ExhaustiveGet, TokenItTrait},
-    statement::Statement,
+    ArgumentName, Name, Parser, ParserError, TokenIt, Type, expression::Expression,
+    iterator::ExhaustiveGet, statement::Statement,
 };
 
 #[derive(Debug, PartialEq)]
-pub struct FunctionSignature
-{
-    pub name: (EcoString, Option<Type>),
-    pub arguments: EcoVec<ArgumentName>,
+pub struct FunctionSignature<'s> {
+    pub name: (&'s [u8], Option<Type<'s>>),
+    pub arguments: EcoVec<ArgumentName<'s>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Item
-{
-    Const
-    {
-        name: Name, value: Expression
+pub enum Item<'s> {
+    Const {
+        name: Name<'s>,
+        value: Expression<'s>,
     },
-    Function
-    {
-        signature: FunctionSignature,
-        body: EcoVec<Statement>,
+    Function {
+        signature: FunctionSignature<'s>,
+        body: EcoVec<Statement<'s>>,
     },
 }
 
-impl<I: TokenItTrait> ExhaustiveGet<I> for Item
-{
-    fn find_predicate(tokens: &mut TokenIt<I>) -> Result<Self::ParsePredicate, ParserError>
-    {
-        if tokens.0.peek().is_some_and(|t| t.value == "const")
-        {
+impl<I: TokenIt> ExhaustiveGet<I> for Item<'_> {
+    fn find_predicate<'s>(
+        parser: &mut Parser<'s, I>,
+    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
+        if parser.peek_value("const") {
             Ok(Self::parse_const)
-        }
-        else if tokens.0.peek().is_some_and(|t| t.value == "func")
-        {
+        } else if parser.peek_value("func") {
             Ok(Self::parse_function)
-        }
-        else
-        {
-            Err(ParserError::ExpectedASTStructure { name: "Item" })
+        } else {
+            Err(ParserError::ExpectedASTStructure {
+                span: parser.current_span(),
+                name: "Item",
+            })
         }
     }
 }
 
-impl Item
-{
-    pub fn parse_const<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
-    {
-        tokens
-            .next(|t| t.value == "const")
+impl Item<'_> {
+    pub fn parse_const<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        parser
+            .consume_value("const")
             .ok_or(ParserError::ExpectedTokenValue {
+                span: parser.current_span(),
                 value: "const".into(),
             })?;
 
-        // partially shared on statement.rs. make this better
-        let identifier = tokens
-            .next(|t| t.r#type == TokenType::Identifier)
-            .ok_or(ParserError::ExpectedTokenType {
-                r#type: "Identifier",
-            })?
-            .value;
+        let identifier = {
+            let token = parser
+                .consume(|t| t.r#type == TokenType::Identifier)
+                .ok_or(ParserError::ExpectedTokenType {
+                    span: parser.current_span(),
+                    r#type: "Identifier",
+                })?;
+            parser.token_value(&token)
+        };
 
         let r#type = {
-            let r#type = tokens
-                .0
-                .peeking_take_while(|t| t.value != "=")
-                .map(|t| t.value)
+            let source = parser.source;
+            let r#type = parser
+                .tokens
+                .peeking_take_while(|t| !t.is_value(source, "="))
+                .map(|t| t.value(source))
                 .collect::<Vec<_>>();
 
-            if r#type.is_empty()
-            {
+            if r#type.is_empty() {
                 None
-            }
-            else
-            {
+            } else {
                 Some(Type(r#type))
             }
         };
 
-        let value = Expression::get(tokens)?;
+        let value = parser.next_expression()?;
 
-        tokens
-            .next(|t| t.r#type == TokenType::Newline)
-            .ok_or(ParserError::ExpectedNewline)?;
+        parser
+            .consume(|t| t.r#type == TokenType::Newline)
+            .ok_or(ParserError::ExpectedNewline {
+                span: parser.current_span(),
+            })?;
 
         Ok(Self::Const {
             name: Name(identifier, r#type),
@@ -96,34 +90,53 @@ impl Item
         })
     }
 
-    pub fn parse_function<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
-    {
-        tokens
-            .next(|t| t.value == "func")
+    pub fn parse_function<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+        parser
+            .consume_value("func")
             .ok_or(ParserError::ExpectedTokenValue {
+                span: parser.current_span(),
                 value: "func".into(),
             })?;
 
-        let identifier = tokens
-            .next(|t| t.r#type == TokenType::Identifier)
-            .ok_or(ParserError::ExpectedTokenType {
-                r#type: "Identifier",
-            })?
-            .value;
+        let identifier = {
+            let token = parser
+                .consume(|t| t.r#type == TokenType::Identifier)
+                .ok_or(ParserError::ExpectedTokenType {
+                    span: parser.current_span(),
+                    r#type: "Identifier",
+                })?;
+            parser.token_value(&token)
+        };
 
-        let arguments = tokens.consume_generic_list(
+        let arguments = parser.consume_list(
             ("(", ")"),
-            |t| {
-                let identifier = t
-                    .next(|t| t.r#type == TokenType::Identifier)
-                    .ok_or(ParserError::ExpectedTokenType {
-                        r#type: "Identifier",
-                    })?
-                    .value;
+            |parser| {
+                let identifier = {
+                    let token = parser
+                        .consume(|t| {
+                            matches!(
+                                t,
+                                Token {
+                                    r#type: TokenType::Identifier,
+                                    ..
+                                }
+                            )
+                        })
+                        .ok_or(ParserError::ExpectedTokenType {
+                            span: parser.current_span(),
+                            r#type: "Identifier",
+                        })?;
+                    parser.token_value(&token)
+                };
 
+                let source = parser.source;
                 let r#type = Type(
-                    t.0.peeking_take_while(|t| t.value != "," && t.value != ")")
-                        .map(|t| t.value)
+                    parser
+                        .tokens
+                        .peeking_take_while(|t| {
+                            !t.is_value(source, ",") && !t.is_value(source, ")")
+                        })
+                        .map(|t| t.value(source))
                         .collect(),
                 );
 
@@ -133,23 +146,21 @@ impl Item
         )?;
 
         let r#type = {
-            let r#type = tokens
-                .0
-                .peeking_take_while(|t| t.value != "{")
-                .map(|t| t.value)
+            let source = parser.source;
+            let r#type = parser
+                .tokens
+                .peeking_take_while(|t| !t.is_value(source, "{"))
+                .map(|t| t.value(source))
                 .collect::<Vec<_>>();
 
-            if r#type.is_empty()
-            {
+            if r#type.is_empty() {
                 None
-            }
-            else
-            {
+            } else {
                 Some(Type(r#type))
             }
         };
 
-        let body = tokens.consume_block()?;
+        let body = parser.consume_block()?;
 
         /* TODO!
         if let Some(ref r#type) = r#type

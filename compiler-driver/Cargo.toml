@@ -12,3 +12,5 @@ clap = { version = "4.5.54", features = ["derive"] }
 mimalloc = "*"
 ecow = "0.2.6"
 miette = { version = "7.6.0", features = ["fancy"] }
+thiserror = "2.0.17"
+itertools = "0.14.0"

@@ -192,7 +192,6 @@ name = "compiler-lexer"
 version = "0.1.0"
 dependencies = [
  "bstr",
- "itertools",
  "miette",
  "pretty_assertions",
  "thiserror",
@@ -539,8 +538,10 @@ dependencies = [
  "compiler-lexer",
  "compiler-parser",
  "ecow",
+ "itertools",
  "miette",
  "mimalloc",
+ "thiserror",
 ]
 
 [[package]]

@@ -5,7 +5,7 @@ use super::{
     Expression,
     operator::{Operator, to_operator},
 };
-use crate::{ParserError, TokenIt, iterator::TokenItTrait};
+use crate::{Parser, ParserError, TokenIt};
 
 const OPERATOR_PRIORITY: &[&[Operator]] = {
     use Operator::*;
@@ -43,23 +43,21 @@ impl Node
 {
     // We do not need to concern ourselves with unary operators or parenthesis here because we already handle them as singular, regular expressions.
     // This makes our shunting yard much simpler.
-    fn shunting_yard<I: TokenItTrait>(
-        tokens: &mut TokenIt<I>,
-    ) -> Result<EcoVec<RPNItem>, ParserError>
+    fn shunting_yard<I: TokenIt>(parser: &mut Parser<I>) -> Result<EcoVec<RPNItem>, ParserError>
     {
         let mut output_queue = EcoVec::new();
         let mut operator_stack = EcoVec::new();
 
         let mut last_was_scalar = false;
 
-        while let Some(p) = tokens.0.peek()
+        while let Some(p) = parser.0.peek()
             && (p.r#type != TokenType::Separator || p.value == "(")
         {
             if last_was_scalar
             {
                 last_was_scalar = false;
 
-                let t = tokens
+                let t = parser
                     .next(|t| t.r#type == TokenType::Operator)
                     .ok_or(ParserError::ExpectedTokenType { r#type: "Operator" })?;
 
@@ -91,7 +89,7 @@ impl Node
             {
                 last_was_scalar = true;
 
-                let e = (Expression::shallow_find_predicate(&mut tokens.clone())?)(tokens)?;
+                let e = (Expression::shallow_find_predicate(&mut parser.clone())?)(parser)?;
                 output_queue.push(RPNItem::Scalar(e));
             }
         }
@@ -123,9 +121,9 @@ impl Node
     }
 
     #[inline]
-    pub fn parse<I: TokenItTrait>(tokens: &mut TokenIt<I>) -> Result<Self, ParserError>
+    pub fn parse<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError>
     {
-        let rpn = Self::shunting_yard(tokens)?;
+        let rpn = Self::shunting_yard(parser)?;
 
         let res = Self::consume(&mut rpn.into_iter().rev())?;
 
@@ -144,6 +142,8 @@ mod tests
     #[test]
     fn simple_binary_passes()
     {
+        const SOURCE: &[u8] = "9 + 10".as_bytes();
+
         assert_eq!(
             Node::parse(&mut TokenIt(
                 compiler_lexer::tokenize("9 + 10").flatten().peekable()

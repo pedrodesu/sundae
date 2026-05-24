@@ -1,13 +1,6 @@
-#![feature(iter_advance_by)]
 #![feature(is_ascii_octdigit)]
 
-use std::{
-    iter::{Copied, Enumerate, Peekable},
-    slice::Iter,
-};
-
 use bstr::ByteSlice;
-use itertools::Itertools;
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -17,11 +10,9 @@ pub mod definitions;
 
 // TODO better messages on errors
 #[derive(Error, Debug, Diagnostic, PartialEq)]
-pub enum LexerError
-{
+pub enum LexerError {
     #[error("Unknown start of token {token}")]
-    UnexpectedChar
-    {
+    UnexpectedChar {
         #[label("Here")]
         span: Span,
         token: char,
@@ -31,48 +22,41 @@ pub enum LexerError
         STR_DELIM => "string",
         _ => unreachable!()
     })]
-    UnclosedDelim
-    {
+    UnclosedDelim {
         #[label("Here")]
         span: Span,
         delim: u8,
     },
     #[error("Missing digits after exponent symbol")]
-    MissingExp
-    {
+    MissingExp {
         #[label("Here")]
         span: Span,
     },
     #[error("Integer base must be lowercase")]
-    IntBaseNotLowercase
-    {
+    IntBaseNotLowercase {
         #[label("Here")]
         span: Span,
     },
     #[error("Invalid digit on {}", if *base != 10 { "base {base} integer" } else if *float { "float" } else { "integer" })]
-    InvalidDigitOnNumber
-    {
+    InvalidDigitOnNumber {
         #[label("Here")]
         span: Span,
         float: bool,
         base: u32,
     },
     #[error("Missing digits after integer base")]
-    MissingDigitsAfterIntBase
-    {
+    MissingDigitsAfterIntBase {
         #[label("Here")]
         span: Span,
     },
     #[error("Invalid escape sequence")]
-    InvalidEscapeSequence
-    {
+    InvalidEscapeSequence {
         #[label("Here")]
         span: Span,
     },
     #[error("{}", if *len == 0 { "Rune must not be empty" } else { "Rune must have exactly one codepoint" })]
     #[diagnostic(help("If you meant to create a string, use double quotes"))]
-    InvalidRune
-    {
+    InvalidRune {
         #[label("Here")]
         span: Span,
         len: usize,
@@ -80,115 +64,93 @@ pub enum LexerError
 }
 
 #[derive(Debug, PartialEq)]
-pub enum LexerEvent
-{
+pub enum LexerEvent {
     Token(Token),
     Error(LexerError),
 }
 
-type SourceIter<'a> = Peekable<Enumerate<Copied<Iter<'a, u8>>>>;
-
-pub struct Lexer<'a>
-{
+#[derive(Clone)]
+pub struct Lexer<'a> {
     source: &'a [u8],
-    it: SourceIter<'a>,
+    pos: usize,
 }
 
-impl<'a> From<&'a [u8]> for Lexer<'a>
-{
+impl<'a> From<&'a [u8]> for Lexer<'a> {
     #[inline]
-    fn from(bytes: &'a [u8]) -> Self
-    {
+    fn from(bytes: &'a [u8]) -> Self {
         Self {
             source: bytes,
-            it: bytes.iter().copied().enumerate().peekable(),
+            pos: 0,
         }
     }
 }
 
-impl<'a> Iterator for Lexer<'a>
-{
+impl<'a> Iterator for Lexer<'a> {
     type Item = LexerEvent;
 
-    fn next(&mut self) -> Option<Self::Item>
-    {
+    fn next(&mut self) -> Option<Self::Item> {
         self.skip_horizontal_whitespace();
 
-        let (i, c) = self.it.peek().copied()?;
+        let i = self.pos;
+        let c = self.peek_byte()?;
 
-        if c == b'\n'
-        {
-            self.it.next();
+        if c == b'\n' {
+            self.advance_by(1);
             Some(self.token(TokenType::Newline, Span::single(i)))
-        }
-        else if let STR_DELIM | RUNE_DELIM = c
-        {
+        } else if let STR_DELIM | RUNE_DELIM = c {
             Some(self.lex_string_or_rune(i, c))
-        }
-        else if let Some(&COMMENT_PREFIX) = self.source[i..].first_chunk()
-        {
+        } else if let Some(&COMMENT_PREFIX) = self.source[i..].first_chunk() {
             Some(self.lex_comment(i))
-        }
-        else if c == b'_' || c.is_ascii_alphabetic()
-        {
+        } else if c == b'_' || c.is_ascii_alphabetic() {
             Some(self.lex_identifier_or_keyword(i))
-        }
-        else if self.source[i].is_ascii_digit()
-        {
+        } else if self.source[i].is_ascii_digit() {
             Some(self.lex_number(i))
-        }
-        else if let Some(op) = self.operator_at(i)
-        {
+        } else if let Some(op) = self.operator_at(i) {
             Some(self.lex_operator(i, op))
-        }
-        else if self
-            .it
-            .next_if(|&(_, b)| SEPARATORS.binary_search(&b).is_ok())
-            .is_some()
-        {
+        } else if SEPARATORS.binary_search(&c).is_ok() {
+            self.advance_by(1);
             Some(self.token(TokenType::Separator, Span::single(i)))
-        }
-        else
-        {
+        } else {
             Some(self.lex_unexpected_char(i))
         }
     }
 }
 
-impl<'a> Lexer<'a>
-{
-    fn skip_horizontal_whitespace(&mut self)
-    {
-        let Some((i, _)) = self.it.peek().copied()
-        else
-        {
+impl<'a> Lexer<'a> {
+    fn skip_horizontal_whitespace(&mut self) {
+        let Some(rem) = self.source.get(self.pos..) else {
             return;
         };
 
-        let n = self.source[i..]
+        let n = rem
             .find_not_byteset(HORIZONTAL_WHITESPACE)
-            .unwrap_or(self.source.len() - i);
+            .unwrap_or(rem.len());
 
-        self.it.advance_by(n).unwrap();
+        self.advance_by(n);
     }
 
     #[inline]
-    fn token(&self, r#type: TokenType, span: Span) -> LexerEvent
-    {
+    fn token(&self, r#type: TokenType, span: Span) -> LexerEvent {
         LexerEvent::Token(Token { r#type, span })
+    }
+
+    #[inline]
+    fn peek_byte(&self) -> Option<u8> {
+        self.source.get(self.pos).copied()
+    }
+
+    #[inline]
+    fn advance_by(&mut self, n: usize) {
+        self.pos += n;
     }
 }
 
-impl<'a> Lexer<'a>
-{
-    fn lex_string_or_rune(&mut self, start: usize, delim: u8) -> LexerEvent
-    {
-        self.it.next();
+impl<'a> Lexer<'a> {
+    fn lex_string_or_rune(&mut self, start: usize, delim: u8) -> LexerEvent {
+        self.advance_by(1);
 
-        let Some(end) = self.find_closing_delim(start, delim)
-        else
-        {
-            self.it.by_ref().for_each(drop);
+        let Some(end) = self.find_closing_delim(start, delim) else {
+            self.pos = self.source.len();
 
             return LexerEvent::Error(LexerError::UnclosedDelim {
                 span: Span::new(start, self.source.len()),
@@ -196,13 +158,12 @@ impl<'a> Lexer<'a>
             });
         };
 
-        self.it.advance_by(end - start).unwrap();
+        self.pos = end + 1;
 
         let span = Span::inclusive(start, end);
         let inner = &self.source[start + 1..end];
 
-        let decoded_len = match self.decoded_char_len(inner, start + 1)
-        {
+        let decoded_len = match self.decoded_char_len(inner, start + 1) {
             Ok(len) => len,
             Err(error) => return LexerEvent::Error(error),
         };
@@ -214,8 +175,7 @@ impl<'a> Lexer<'a>
         }
 
         self.token(
-            TokenType::Literal(match delim
-            {
+            TokenType::Literal(match delim {
                 STR_DELIM => LiteralType::String,
                 RUNE_DELIM => LiteralType::Rune,
                 _ => unreachable!(),
@@ -224,30 +184,26 @@ impl<'a> Lexer<'a>
         )
     }
 
-    fn lex_comment(&mut self, start: usize) -> LexerEvent
-    {
+    fn lex_comment(&mut self, start: usize) -> LexerEvent {
         let rem = &self.source[start..];
         let len = rem.find_byte(b'\n').unwrap_or(rem.len());
 
-        self.it.advance_by(len).unwrap();
+        self.pos = start + len;
 
         self.token(TokenType::Comment, Span::new(start, start + len))
     }
 
-    fn lex_identifier_or_keyword(&mut self, start: usize) -> LexerEvent
-    {
-        let end = self
-            .it
-            .peeking_take_while(|&(_, b)| Self::is_identifier_suffix(b))
-            .last()
-            .unwrap()
-            .0;
+    fn lex_identifier_or_keyword(&mut self, start: usize) -> LexerEvent {
+        while self.peek_byte().is_some_and(Self::is_identifier_suffix) {
+            self.advance_by(1);
+        }
+
+        let end = self.pos - 1;
 
         self.token(self.classify_ident(start, end), Span::inclusive(start, end))
     }
 
-    fn lex_number(&mut self, start: usize) -> LexerEvent
-    {
+    fn lex_number(&mut self, start: usize) -> LexerEvent {
         let prefix = self.source[start..].first_chunk().copied();
 
         match prefix
@@ -259,32 +215,34 @@ impl<'a> Lexer<'a>
         }
     }
 
-    fn lex_prefixed_integer(&mut self, start: usize, prefix: [u8; 2], base: u32) -> LexerEvent
-    {
-        if prefix.map(|b| b.to_ascii_lowercase()) != prefix
-        {
-            self.it.advance_by(2).unwrap();
+    fn lex_prefixed_integer(&mut self, start: usize, prefix: [u8; 2], base: u32) -> LexerEvent {
+        if prefix.map(|b| b.to_ascii_lowercase()) != prefix {
+            self.advance_by(2);
 
             return LexerEvent::Error(LexerError::IntBaseNotLowercase {
                 span: Span::single(start + 1),
             });
         }
 
-        self.it.advance_by(2).unwrap();
+        self.advance_by(2);
+        let digits_start = self.pos;
 
-        let Some((end, _)) = self
-            .it
-            .peeking_take_while(|&(_, c)| Self::is_digit_in_base(c, base))
-            .last()
-        else
+        while self
+            .peek_byte()
+            .is_some_and(|c| Self::is_digit_in_base(c, base))
         {
+            self.advance_by(1);
+        }
+
+        if self.pos == digits_start {
             return LexerEvent::Error(LexerError::MissingDigitsAfterIntBase {
                 span: Span::new(start, start + 2),
             });
-        };
+        }
 
-        if let Some(error) = self.number_suffix_error(end, base, false)
-        {
+        let end = self.pos - 1;
+
+        if let Some(error) = self.number_suffix_error(end, base, false) {
             return error;
         }
 
@@ -294,36 +252,29 @@ impl<'a> Lexer<'a>
         )
     }
 
-    fn lex_decimal_or_float(&mut self, start: usize) -> LexerEvent
-    {
+    fn lex_decimal_or_float(&mut self, start: usize) -> LexerEvent {
         let mut end = start;
         let mut has_dot = false;
         let mut has_exp = false;
 
-        while let Some(&(i, b)) = self.it.peek()
-        {
-            match b
-            {
-                b'0'..=b'9' =>
-                {
-                    self.it.next();
+        while let Some(b) = self.peek_byte() {
+            match b {
+                b'0'..=b'9' => {
+                    self.advance_by(1);
                 }
-                b'.' if !has_dot && !has_exp =>
-                {
-                    self.it.next();
+                b'.' if !has_dot && !has_exp => {
+                    self.advance_by(1);
                     has_dot = true;
                 }
-                b'e' | b'E' if !has_exp =>
-                {
-                    self.it.next();
+                b'e' | b'E' if !has_exp => {
+                    self.advance_by(1);
                     has_exp = true;
 
-                    self.it.next_if(|&(_, b)| matches!(b, b'+' | b'-'));
+                    if matches!(self.peek_byte(), Some(b'+' | b'-')) {
+                        self.advance_by(1);
+                    }
 
-                    if !matches!(self.it.peek(), Some(&(_, b)) if b.is_ascii_digit())
-                    {
-                        self.it.advance_by(end - start).unwrap();
-
+                    if !self.peek_byte().is_some_and(|b| b.is_ascii_digit()) {
                         return LexerEvent::Error(LexerError::MissingExp {
                             span: Span::inclusive(start, end),
                         });
@@ -332,41 +283,33 @@ impl<'a> Lexer<'a>
                 _ => break,
             }
 
-            end = i;
+            end = self.pos - 1;
         }
 
         let is_float = has_dot || has_exp;
 
-        if let Some(error) = self.number_suffix_error(end, 10, is_float)
-        {
+        if let Some(error) = self.number_suffix_error(end, 10, is_float) {
             return error;
         }
 
         self.token(
-            TokenType::Literal(
-                if is_float
-                {
-                    LiteralType::Float
-                }
-                else
-                {
-                    LiteralType::Int
-                },
-            ),
+            TokenType::Literal(if is_float {
+                LiteralType::Float
+            } else {
+                LiteralType::Int
+            }),
             Span::inclusive(start, end),
         )
     }
 
-    fn lex_operator(&mut self, start: usize, op: &[u8]) -> LexerEvent
-    {
-        self.it.advance_by(op.len()).unwrap();
+    fn lex_operator(&mut self, start: usize, op: &[u8]) -> LexerEvent {
+        self.advance_by(op.len());
         self.token(TokenType::Operator, Span::new(start, start + op.len()))
     }
 
-    fn lex_unexpected_char(&mut self, start: usize) -> LexerEvent
-    {
+    fn lex_unexpected_char(&mut self, start: usize) -> LexerEvent {
         let c = self.source[start..].chars().next().unwrap();
-        self.it.advance_by(c.len_utf8()).unwrap();
+        self.advance_by(c.len_utf8());
 
         LexerEvent::Error(LexerError::UnexpectedChar {
             span: Span::inclusive(start, start + c.len_utf8() - 1),
@@ -375,14 +318,11 @@ impl<'a> Lexer<'a>
     }
 }
 
-impl<'a> Lexer<'a>
-{
-    fn find_closing_delim(&self, start: usize, delim: u8) -> Option<usize>
-    {
+impl<'a> Lexer<'a> {
+    fn find_closing_delim(&self, start: usize, delim: u8) -> Option<usize> {
         let mut idx = start + 1;
 
-        loop
-        {
+        loop {
             let pos = self.source[idx..].find_byte(delim)?;
             let found_at = idx + pos;
 
@@ -392,8 +332,7 @@ impl<'a> Lexer<'a>
                 .take_while(|&&b| b == b'\\')
                 .count();
 
-            if backslashes % 2 == 0
-            {
+            if backslashes % 2 == 0 {
                 return Some(found_at);
             }
 
@@ -401,32 +340,22 @@ impl<'a> Lexer<'a>
         }
     }
 
-    fn validate_rune(&self, len: usize, span: Span) -> Result<(), LexerError>
-    {
-        if len == 1
-        {
+    fn validate_rune(&self, len: usize, span: Span) -> Result<(), LexerError> {
+        if len == 1 {
             Ok(())
-        }
-        else
-        {
+        } else {
             Err(LexerError::InvalidRune { span, len })
         }
     }
 }
 
-impl<'a> Lexer<'a>
-{
-    fn number_suffix_error(&mut self, end: usize, base: u32, float: bool) -> Option<LexerEvent>
-    {
-        if !self
-            .it
-            .peek()
-            .is_some_and(|&(_, b)| Self::is_identifier_suffix(b))
-        {
+impl<'a> Lexer<'a> {
+    fn number_suffix_error(&mut self, end: usize, base: u32, float: bool) -> Option<LexerEvent> {
+        if !self.peek_byte().is_some_and(Self::is_identifier_suffix) {
             return None;
         }
 
-        self.it.next();
+        self.advance_by(1);
 
         Some(LexerEvent::Error(LexerError::InvalidDigitOnNumber {
             span: Span::single(end + 1),
@@ -436,13 +365,9 @@ impl<'a> Lexer<'a>
     }
 }
 
-impl<'a> Lexer<'a>
-{
-    fn decoded_char_len(&self, bytes: &[u8], offset: usize) -> Result<usize, LexerError>
-    {
-        let Ok(s) = std::str::from_utf8(bytes)
-        else
-        {
+impl<'a> Lexer<'a> {
+    fn decoded_char_len(&self, bytes: &[u8], offset: usize) -> Result<usize, LexerError> {
+        let Ok(s) = std::str::from_utf8(bytes) else {
             return Err(LexerError::InvalidEscapeSequence {
                 span: Span::new(offset, offset + bytes.len()),
             });
@@ -452,59 +377,45 @@ impl<'a> Lexer<'a>
         let mut i = 0;
         let mut len = 0;
 
-        while i < bytes.len()
-        {
-            if bytes[i] != b'\\'
-            {
+        while i < bytes.len() {
+            if bytes[i] != b'\\' {
                 let c = s[i..].chars().next().unwrap();
                 i += c.len_utf8();
                 len += 1;
                 continue;
             }
 
-            match bytes.get(i + 1).copied()
-            {
-                Some(b'x') =>
-                {
-                    if Self::take_hex_digits(bytes, i + 2, 2)
-                    {
+            match bytes.get(i + 1).copied() {
+                Some(b'x') => {
+                    if Self::take_hex_digits(bytes, i + 2, 2) {
                         i += 4;
                         len += 1;
-                    }
-                    else
-                    {
+                    } else {
                         return Err(LexerError::InvalidEscapeSequence {
                             span: Self::invalid_hex_escape_span(offset, i, bytes, 2),
                         });
                     }
                 }
-                Some(b'u') =>
-                {
-                    if Self::take_hex_digits(bytes, i + 2, 4)
-                    {
+                Some(b'u') => {
+                    if Self::take_hex_digits(bytes, i + 2, 4) {
                         i += 6;
                         len += 1;
-                    }
-                    else
-                    {
+                    } else {
                         return Err(LexerError::InvalidEscapeSequence {
                             span: Self::invalid_hex_escape_span(offset, i, bytes, 4),
                         });
                     }
                 }
-                Some(b'n' | b'r' | b't' | b'0' | b'\\' | b'\'' | b'`') =>
-                {
+                Some(b'n' | b'r' | b't' | b'0' | b'\\' | b'\'' | b'`') => {
                     i += 2;
                     len += 1;
                 }
-                Some(b) =>
-                {
+                Some(b) => {
                     return Err(LexerError::InvalidEscapeSequence {
                         span: Span::new(offset + i, offset + i + 1 + char::from(b).len_utf8()),
                     });
                 }
-                None =>
-                {
+                None => {
                     return Err(LexerError::InvalidEscapeSequence {
                         span: Span::new(offset + i, offset + i + 1),
                     });
@@ -515,8 +426,7 @@ impl<'a> Lexer<'a>
         Ok(len)
     }
 
-    fn take_hex_digits(bytes: &[u8], start: usize, count: usize) -> bool
-    {
+    fn take_hex_digits(bytes: &[u8], start: usize, count: usize) -> bool {
         bytes[start..]
             .get(..count)
             .is_some_and(|digits| digits.iter().all(u8::is_ascii_hexdigit))
@@ -527,8 +437,7 @@ impl<'a> Lexer<'a>
         escape_start: usize,
         bytes: &[u8],
         digits_len: usize,
-    ) -> Span
-    {
+    ) -> Span {
         let end = bytes[escape_start + 2..]
             .iter()
             .take(digits_len)
@@ -539,17 +448,14 @@ impl<'a> Lexer<'a>
     }
 }
 
-impl<'a> Lexer<'a>
-{
+impl<'a> Lexer<'a> {
     #[inline]
-    fn is_identifier_suffix(b: u8) -> bool
-    {
+    fn is_identifier_suffix(b: u8) -> bool {
         b.is_ascii_alphanumeric() || b == b'_' || !b.is_ascii()
     }
 
     #[inline]
-    fn operator_at(&self, i: usize) -> Option<&'static [u8]>
-    {
+    fn operator_at(&self, i: usize) -> Option<&'static [u8]> {
         OPERATORS
             .iter()
             .copied()
@@ -557,10 +463,8 @@ impl<'a> Lexer<'a>
     }
 
     #[inline]
-    fn special_base(prefix: [u8; 2]) -> Option<u32>
-    {
-        match prefix
-        {
+    fn special_base(prefix: [u8; 2]) -> Option<u32> {
+        match prefix {
             HEX_PREFIX => Some(16),
             OCT_PREFIX => Some(8),
             BIN_PREFIX => Some(2),
@@ -569,10 +473,8 @@ impl<'a> Lexer<'a>
     }
 
     #[inline]
-    fn is_digit_in_base(c: u8, base: u32) -> bool
-    {
-        match base
-        {
+    fn is_digit_in_base(c: u8, base: u32) -> bool {
+        match base {
             16 => c.is_ascii_hexdigit(),
             8 => c.is_ascii_octdigit(),
             2 => matches!(c, b'0' | b'1'),
@@ -581,36 +483,29 @@ impl<'a> Lexer<'a>
         }
     }
 
-    fn classify_ident(&self, start: usize, end: usize) -> TokenType
-    {
+    fn classify_ident(&self, start: usize, end: usize) -> TokenType {
         let ident = &self.source[start..=end];
 
-        if definitions::KEYWORDS.binary_search(&ident).is_ok()
-        {
+        if definitions::KEYWORDS.binary_search(&ident).is_ok() {
             TokenType::Keyword
-        }
-        else if definitions::KEYWORD_LIKE_OPERATORS
+        } else if definitions::KEYWORD_LIKE_OPERATORS
             .binary_search(&ident)
             .is_ok()
         {
             TokenType::Operator
-        }
-        else
-        {
+        } else {
             TokenType::Identifier
         }
     }
 }
 
 #[inline(always)]
-pub fn tokenize<S: AsRef<[u8]> + ?Sized>(source: &S) -> Lexer<'_>
-{
+pub fn tokenize<S: AsRef<[u8]> + ?Sized>(source: &S) -> Lexer<'_> {
     Lexer::from(source.as_ref())
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use LiteralType::*;
     use TokenType::*;
 
@@ -634,10 +529,8 @@ mod tests
         };
     }
 
-    // TODO only need to fix strings and runes atp
     #[test]
-    fn strings()
-    {
+    fn strings() {
         // Basic string
         assert_token!("\"hello\"", 7, Literal(String));
 
@@ -680,8 +573,7 @@ mod tests
     }
 
     #[test]
-    fn runes()
-    {
+    fn runes() {
         // Basic rune
         assert_token!("`a`", 3, Literal(Rune));
 
@@ -729,8 +621,7 @@ mod tests
     }
 
     #[test]
-    fn comments()
-    {
+    fn comments() {
         // Simple comment
         assert_token!("// hello", 8, Comment);
 
@@ -738,13 +629,11 @@ mod tests
         assert_token!("// another comment\n", 18, Comment);
     }
 
-    mod integers
-    {
+    mod integers {
         use super::*;
 
         #[test]
-        fn hexadecimal()
-        {
+        fn hexadecimal() {
             assert_token!("0x42069FFFff", 12, Literal(Int));
             assert_token!("0xffffffffffffffffffffffffffffffff", 34, Literal(Int));
             assert_token!("0xDEADBEEF", 10, Literal(Int));
@@ -770,8 +659,7 @@ mod tests
         }
 
         #[test]
-        fn octal()
-        {
+        fn octal() {
             assert_token!("0o01234567", 10, Literal(Int));
             assert_token!("0o777", 5, Literal(Int));
 
@@ -793,8 +681,7 @@ mod tests
         }
 
         #[test]
-        fn binary()
-        {
+        fn binary() {
             assert_token!("0b000101010010101010101", 23, Literal(Int));
             assert_token!("0b1010", 6, Literal(Int));
 
@@ -816,8 +703,7 @@ mod tests
         }
 
         #[test]
-        fn decimal()
-        {
+        fn decimal() {
             assert_token!("0", 1, Literal(Int));
             assert_token!("00", 2, Literal(Int));
             assert_token!("01234", 5, Literal(Int));
@@ -835,8 +721,7 @@ mod tests
     }
 
     #[test]
-    fn floats()
-    {
+    fn floats() {
         assert_token!("12.34", 5, Literal(Float));
         assert_token!("01234.00", 8, Literal(Float));
         assert_token!("42.060", 6, Literal(Float));
@@ -862,8 +747,7 @@ mod tests
     }
 
     #[test]
-    fn identifiers()
-    {
+    fn identifiers() {
         assert_token!("abc", 3, Identifier);
         assert_token!("abc_def", 7, Identifier);
         assert_token!("_abc_", 5, Identifier);
@@ -872,20 +756,16 @@ mod tests
     }
 
     #[test]
-    fn operators()
-    {
-        for &op in OPERATORS
-        {
+    fn operators() {
+        for &op in OPERATORS {
             let op = str::from_utf8(op).unwrap();
             assert_token!(op, op.len(), Operator);
         }
     }
 
     #[test]
-    fn separators()
-    {
-        for &sep in SEPARATORS
-        {
+    fn separators() {
+        for &sep in SEPARATORS {
             let slice = &[sep];
             let sep = str::from_utf8(slice).unwrap();
             assert_token!(sep, sep.len(), Separator);
