@@ -6,24 +6,18 @@ use crate::{Parser, ParserError, Statement};
 
 pub trait TokenIt = Iterator<Item = Token> + Clone;
 
-pub trait ExhaustiveGet<I: TokenIt>: Sized {
-    fn find_predicate<'s>(
-        parser: &mut Parser<'s, I>,
-    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError>;
-
-    #[inline]
-    fn get<'s>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
-        let predicate = Self::find_predicate(&mut parser.clone())?;
-        predicate(parser)
-    }
+pub trait ExhaustiveGet<'s, I: TokenIt>: Sized {
+    fn get(parser: &mut Parser<'s, I>) -> Result<Self, ParserError>;
 }
 
-impl<I: TokenIt> Parser<'_, I> {
+impl<'s, I: TokenIt> Parser<'s, I> {
     #[inline]
     pub fn peek_value(&mut self, value: &str) -> bool {
+        // TODO shouldn't we have ignore_newlines here?
+
         self.tokens
             .peek()
-            .is_some_and(|token| token.is_value(self.source, value))
+            .is_some_and(|t| t.is_value(self.source, value))
     }
 
     #[inline]
@@ -43,8 +37,6 @@ impl<I: TokenIt> Parser<'_, I> {
 
     #[inline]
     pub fn consume(&mut self, predicate: impl FnOnce(&Token) -> bool) -> Option<Token> {
-        self.ignore_newlines();
-
         self.tokens.next_if(predicate)
     }
 
@@ -95,7 +87,7 @@ impl<I: TokenIt> Parser<'_, I> {
     }
 
     #[inline]
-    pub fn consume_block(&mut self) -> Result<EcoVec<Statement>, ParserError> {
+    pub fn consume_block(&mut self) -> Result<EcoVec<Statement<'s>>, ParserError> {
         self.consume_list(("{", "}"), Self::next_statement, None)
     }
 }

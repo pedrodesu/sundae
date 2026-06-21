@@ -1,4 +1,4 @@
-use compiler_lexer::definitions::LiteralType;
+use compiler_lexer::{LexerEvent, definitions::LiteralType};
 use compiler_parser::{AST, Expression, Item, Name, Statement, Type, item::FunctionSignature};
 use pretty_assertions::assert_eq;
 
@@ -16,59 +16,63 @@ const SOURCE: &str = r#"func function() {
 #[test]
 fn parser_passes() {
     assert_eq!(
-        compiler_parser::parse(compiler_lexer::tokenize(SOURCE).flatten()),
-        Ok(AST(vec![Item::Function {
+        compiler_parser::parse(
+            SOURCE,
+            compiler_lexer::tokenize(SOURCE).filter_map(|event| match event {
+                LexerEvent::Token(token) => Some(token),
+                LexerEvent::Error(_) => None,
+            })
+        ),
+        Ok(AST([Item::Function {
             signature: FunctionSignature {
-                name: ("function".into(), None),
-                arguments: vec![].into()
+                name: (b"function", None),
+                arguments: [].into()
             },
-            body: vec![
+            body: [
                 Statement::Local {
-                    name: Name("value".into(), None),
+                    name: Name(b"value", None),
                     mutable: true,
                     init: Some(Expression::Literal {
-                        value: "42".into(),
+                        value: b"42",
                         r#type: LiteralType::Int
                     })
                 },
                 Statement::Local {
-                    name: Name("float".into(), Some(Type(vec!["f64".into()]))),
+                    name: Name(b"float", Some(Type([b"f64" as _].into()))),
                     mutable: false,
                     init: Some(Expression::Literal {
-                        value: "2.45".into(),
+                        value: b"2.45",
                         r#type: LiteralType::Float
                     })
                 },
                 Statement::Local {
-                    name: Name("spec".into(), Some(Type(vec!["u8".into()]))),
+                    name: Name(b"spec", Some(Type([b"u8" as _].into()))),
                     mutable: false,
                     init: Some(Expression::Literal {
-                        value: "0b010".into(),
+                        value: b"0b010",
                         r#type: LiteralType::Int
                     })
                 },
                 Statement::Local {
-                    name: Name("a_rune".into(), Some(Type(vec!["rune".into()]))),
+                    name: Name(b"a_rune", Some(Type([b"rune" as _].into()))),
                     mutable: false,
                     init: None
                 },
                 Statement::Local {
-                    name: Name(
-                        "a_str".into(),
-                        Some(Type(vec!["[".into(), "]".into(), "rune".into()]))
-                    ),
+                    name: Name(b"a_str", Some(Type([b"[" as &[_], b"]", b"rune"].into()))),
                     mutable: false,
                     init: Some(Expression::Literal {
-                        value: "\"bruh\"".into(),
+                        value: b"\"bruh\"",
                         r#type: LiteralType::String
                     })
                 },
                 Statement::Expression(Expression::Call {
-                    path: vec!["call".into()].into(),
-                    args: vec![Expression::Path(vec!["number".into()].into())].into()
+                    path: [b"call" as _].into(),
+                    args: [Expression::Path([b"number" as _].into())].into()
                 })
             ]
             .into()
-        }]))
+        }]
+        .into()))
     );
 }

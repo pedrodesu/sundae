@@ -1,10 +1,9 @@
 #![feature(trait_alias)]
-#![feature(associated_type_defaults)]
-#![feature(box_patterns)]
 
 use std::{fmt, iter::Peekable};
 
 use compiler_lexer::definitions::{Span, Token};
+use ecow::EcoVec;
 pub use expression::{Expression, binary::Node, operator::Operator};
 pub use item::Item;
 use iterator::ExhaustiveGet;
@@ -49,11 +48,11 @@ pub enum ParserError {
         span: Span,
         token: Token,
     },
-    #[error("Unknown unary with `{:#?}`", token)]
+    #[error("Illegal unary with operator `{operator}`")]
     IllegalUnary {
         #[label("Here")]
         span: Span,
-        token: Token,
+        operator: Operator,
     },
     #[error("Expected {}", name)]
     ExpectedASTStructure {
@@ -64,7 +63,7 @@ pub enum ParserError {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Type<'s>(pub Vec<&'s [u8]>);
+pub struct Type<'s>(pub EcoVec<&'s [u8]>);
 
 impl fmt::Display for Type<'_> {
     #[inline]
@@ -86,7 +85,7 @@ pub struct ArgumentName<'s>(pub &'s [u8], pub Type<'s>);
 pub struct Name<'s>(pub &'s [u8], pub Option<Type<'s>>);
 
 #[derive(Debug, PartialEq)]
-pub struct AST<'s>(pub Vec<Item<'s>>);
+pub struct AST<'s>(pub EcoVec<Item<'s>>);
 
 #[derive(Clone)]
 pub struct Parser<'s, I: TokenIt> {
@@ -139,7 +138,7 @@ pub fn parse<'s, S: AsRef<[u8]> + ?Sized>(
     tokens: impl TokenIt + 's,
 ) -> Result<AST<'s>, ParserError> {
     let mut parser = Parser::new(source, tokens);
-    let mut items = Vec::new();
+    let mut items = EcoVec::new();
 
     loop {
         parser.ignore_newlines();
@@ -152,4 +151,21 @@ pub fn parse<'s, S: AsRef<[u8]> + ?Sized>(
     }
 
     Ok(AST(items))
+}
+
+#[cfg(test)]
+pub mod tests {
+    use compiler_lexer::LexerEvent;
+
+    use super::*;
+
+    pub fn parser(source: &str) -> Parser<'_, impl TokenIt> {
+        Parser::new(
+            source,
+            compiler_lexer::tokenize(source).map(|event| match event {
+                LexerEvent::Token(token) => token,
+                LexerEvent::Error(err) => panic!("lexer error: {err:?}"),
+            }),
+        )
+    }
 }

@@ -1,6 +1,6 @@
 use compiler_lexer::definitions::{LiteralType, Token, TokenType};
-use ecow::{EcoString, EcoVec};
-use operator::{Operator, to_operator};
+use ecow::EcoVec;
+use operator::Operator;
 
 use crate::{Parser, ParserError, TokenIt, iterator::ExhaustiveGet, statement::Statement};
 
@@ -14,7 +14,7 @@ pub enum Expression<'s> {
         r#type: LiteralType,
     },
     Path(EcoVec<&'s [u8]>),
-    Binary(Box<binary::Node>),
+    Binary(Box<binary::Node<'s>>),
     Unary(Operator, Box<Expression<'s>>),
     Call {
         path: EcoVec<&'s [u8]>,
@@ -31,40 +31,39 @@ pub enum Expression<'s> {
     // TODO Block
 }
 
-impl<I: TokenIt> ExhaustiveGet<I> for Expression<'_> {
-    fn find_predicate<'s>(
-        parser: &mut Parser<'s, I>,
-    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
-        let base_predicate = Self::shallow_find_predicate(&mut parser.clone())?;
+impl<'s, I: TokenIt> ExhaustiveGet<'s, I> for Expression<'s> {
+    fn get(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
+        let mut lookahead = parser.clone();
 
-        base_predicate(parser)?; // Consume whichever base so we can peek ahead
+        let base_predicate = Self::get_shallow(&mut lookahead)?;
+        base_predicate(&mut lookahead)?; // Consume whichever base so we can peek ahead
 
-        if parser
-            .0
+        if lookahead
+            .tokens
             .peek()
             .is_some_and(|t| t.r#type == TokenType::Operator)
         {
-            Ok(Self::parse_binary)
+            Self::parse_binary(parser)
         } else {
-            Ok(base_predicate)
+            base_predicate(parser)
         }
     }
 }
 
-impl Expression<'_> {
-    pub fn shallow_find_predicate<I: TokenIt>(
-        parser: &mut Parser<I>,
-    ) -> Result<fn(&mut Parser<'_, I>) -> Result<Self, ParserError>, ParserError> {
+impl<'s> Expression<'s> {
+    pub fn get_shallow<I: TokenIt>(
+        parser: &mut Parser<'s, I>,
+    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
         if parser.peek_value("if") {
             Ok(Self::parse_if)
         } else if parser
-            .0
+            .tokens
             .peek()
-            .is_some_and(|t| t.r#type == TokenType::Operator)
+            .is_some_and(|t| matches!(t.r#type, TokenType::Operator))
         {
             Ok(Self::parse_unary)
         } else if parser
-            .0
+            .tokens
             .peek()
             .is_some_and(|t| matches!(t.r#type, TokenType::Literal(_)))
         {
@@ -75,7 +74,7 @@ impl Expression<'_> {
             {
                 let mut parser = parser.clone();
 
-                if parser.consume_value("(").is_some() && parser.get_expression().is_ok() {
+                if parser.consume_value("(").is_some() && parser.next_expression().is_ok() {
                     // TODO this won't work properly with a leading colon, as probably other things won't either. make a decision on this
                     if parser.peek_value(")") {
                         return Ok(Self::parse_parenthesis);
@@ -105,12 +104,12 @@ impl Expression<'_> {
     }
 
     #[inline]
-    pub fn parse_literal<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_literal<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         let t @ Token {
             r#type: TokenType::Literal(lit_type),
             ..
         } = parser
-            .next(|t| {
+            .consume(|t| {
                 matches!(
                     t,
                     Token {
@@ -133,17 +132,17 @@ impl Expression<'_> {
         })
     }
 
-    pub fn parse_path<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_path<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         let mut path = EcoVec::new();
 
         while path.is_empty() || parser.consume_value(".").is_some() {
             let segment = parser
-                .next(|t| t.r#type == TokenType::Identifier)
+                .consume(|t| t.r#type == TokenType::Identifier)
                 .ok_or(ParserError::ExpectedTokenType {
                     span: parser.current_span(),
                     r#type: "Identifier",
                 })?
-                .value;
+                .value(parser.source);
             path.push(segment);
         }
 
@@ -151,14 +150,14 @@ impl Expression<'_> {
     }
 
     #[inline]
-    pub fn parse_binary<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_binary<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         // TODO RPN should prolly be bettered.
         let node = binary::Node::parse(parser)?;
 
         Ok(Self::Binary(Box::new(node)))
     }
 
-    pub fn parse_call<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_call<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         let Self::Path(path) = Self::parse_path(parser)? else {
             unreachable!()
         };
@@ -168,7 +167,7 @@ impl Expression<'_> {
         Ok(Self::Call { path, args })
     }
 
-    pub fn parse_if<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_if<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         parser
             .consume_value("if")
             .ok_or(ParserError::ExpectedTokenValue {
@@ -202,9 +201,9 @@ impl Expression<'_> {
         })
     }
 
-    pub fn parse_unary<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
-        let operator = parser
-            .next(|t| {
+    pub fn parse_unary<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
+        let token = parser
+            .consume(|t| {
                 matches!(
                     t,
                     Token {
@@ -217,11 +216,12 @@ impl Expression<'_> {
                 span: parser.current_span(),
                 r#type: "Operator",
             })?;
-        let operator @ (Operator::Minus | Operator::Star) = to_operator(&operator, parser.source)
-        else {
+        let operator = Operator::from_bytes(token.value(parser.source)).unwrap();
+
+        if !matches!(operator, Operator::Minus | Operator::Star) {
             return Err(ParserError::IllegalUnary {
-                span: parser.current_span(),
-                token: operator,
+                span: token.span,
+                operator,
             });
         };
 
@@ -230,7 +230,7 @@ impl Expression<'_> {
         Ok(Self::Unary(operator, Box::new(e)))
     }
 
-    pub fn parse_parenthesis<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_parenthesis<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         parser
             .consume_value("(")
             .ok_or(ParserError::ExpectedTokenValue {
@@ -251,7 +251,7 @@ impl Expression<'_> {
     }
 
     #[inline]
-    pub fn parse_tuple<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_tuple<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         Ok(Self::Tuple(parser.consume_list(
             ("(", ")"),
             Expression::get,
@@ -260,7 +260,7 @@ impl Expression<'_> {
     }
 
     #[inline]
-    pub fn parse_array<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_array<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         Ok(Self::Array(parser.consume_list(
             ("[", "]"),
             Expression::get,
@@ -271,58 +271,45 @@ impl Expression<'_> {
 
 #[cfg(test)]
 mod tests {
-    use compiler_lexer::definitions::Span;
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::Node;
+    use crate::{Node, Operator, tests::parser, *};
 
     // Expression::Literal and Expression::Binary are mere simple wrappers for already tested features, so we don't test them here
 
     #[test]
     fn path_passes() {
         assert_eq!(
-            Expression::parse_path(&mut TokenIt(
-                compiler_lexer::tokenize("a.path.to").flatten().peekable()
-            )),
-            Ok(Expression::Path(
-                vec!["a".into(), "path".into(), "to".into()].into()
-            ))
+            Expression::parse_path(&mut parser("a.path.to")),
+            Ok(Expression::Path([b"a" as &[_], b"path", b"to"].into()))
         );
     }
 
     #[test]
     fn call_passes() {
         assert_eq!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("call_me(     )")
-                    .flatten()
-                    .peekable()
-            )),
+            Expression::parse_call(&mut parser("call_me(     )")),
             Ok(Expression::Call {
-                path: vec!["call_me".into()].into(),
-                args: vec![].into()
+                path: [b"call_me" as &[_]].into(),
+                args: [].into()
             })
         );
 
         assert_eq!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("call  .me()").flatten().peekable()
-            )),
+            Expression::parse_call(&mut parser("call  .me()")),
             Ok(Expression::Call {
-                path: vec!["call".into(), "me".into()].into(),
-                args: vec![].into()
+                path: [b"call" as &[_], b"me"].into(),
+                args: [].into()
             })
         );
 
         assert_eq!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("fn    (2)").flatten().peekable()
-            )),
+            Expression::parse_call(&mut parser("fn    (2)")),
             Ok(Expression::Call {
-                path: vec!["fn".into()].into(),
-                args: vec![Expression::Literal {
-                    value: "2".into(),
+                path: [b"fn" as &[_]].into(),
+                args: [Expression::Literal {
+                    value: b"2",
                     r#type: LiteralType::Int
                 }]
                 .into()
@@ -330,24 +317,20 @@ mod tests {
         );
 
         assert_eq!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("fn. path(\n\n\n420,`j`\n\n ,\n6\n)")
-                    .flatten()
-                    .peekable()
-            )),
+            Expression::parse_call(&mut parser("fn. path(\n\n\n420,`j`\n\n ,\n6\n)")),
             Ok(Expression::Call {
-                path: vec!["fn".into(), "path".into()].into(),
-                args: vec![
+                path: [b"fn" as &[_], b"path"].into(),
+                args: [
                     Expression::Literal {
-                        value: "420".into(),
+                        value: b"420",
                         r#type: LiteralType::Int
                     },
                     Expression::Literal {
-                        value: "`j`".into(),
+                        value: b"`j`",
                         r#type: LiteralType::Rune
                     },
                     Expression::Literal {
-                        value: "6".into(),
+                        value: b"6",
                         r#type: LiteralType::Int
                     }
                 ]
@@ -357,201 +340,159 @@ mod tests {
 
         // TODO better this, make sure we have good errors
         // also this probably panics atm lol gotta make this good
-        assert!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("fn.()").flatten().peekable()
-            ))
-            .is_err()
-        );
+        assert!(Expression::parse_call(&mut parser("fn.()")).is_err());
 
-        assert!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("fn(42, )").flatten().peekable()
-            ))
-            .is_err()
-        );
+        assert!(Expression::parse_call(&mut parser("fn(42, )")).is_err());
 
-        assert!(
-            Expression::parse_call(&mut TokenIt(
-                compiler_lexer::tokenize("fn(, 42)").flatten().peekable()
-            ))
-            .is_err()
-        );
+        assert!(Expression::parse_call(&mut parser("fn(, 42)")).is_err());
     }
 
-    // #[test]
-    // fn if_passes()
-    // {
-    //     // assert_eq!(
-    //     //     Expression::parse_if(&mut TokenIt(
-    //     //         compiler_lexer::tokenize("if 1 {}").flatten().peekable()
-    //     //     )),
-    //     //     Ok(Expression::If {
-    //     //         condition: Box::new(Expression::Literal {
-    //     //             value: "1".into(),
-    //     //             r#type: LiteralType::Int
-    //     //         }),
-    //     //         block: vec![].into(),
-    //     //         else_block: None
-    //     //     })
-    //     // );
+    #[test]
+    fn if_passes() {
+        assert_eq!(
+            Expression::parse_if(&mut parser("if 1 {}")),
+            Ok(Expression::If {
+                condition: Box::new(Expression::Literal {
+                    value: b"1",
+                    r#type: LiteralType::Int
+                }),
+                block: vec![].into(),
+                else_block: None
+            })
+        );
 
-    //     // assert_eq!(
-    //     //     Expression::parse_if(&mut TokenIt(
-    //     //         compiler_lexer::tokenize("if 1 {} else {}")
-    //     //             .flatten()
-    //     //             .peekable()
-    //     //     )),
-    //     //     Ok(Expression::If {
-    //     //         condition: Box::new(Expression::Literal {
-    //     //             value: "1".into(),
-    //     //             r#type: LiteralType::Int
-    //     //         }),
-    //     //         block: vec![].into(),
-    //     //         else_block: Some(vec![].into())
-    //     //     })
-    //     // );
+        assert_eq!(
+            Expression::parse_if(&mut parser("if 1 {} else {}")),
+            Ok(Expression::If {
+                condition: Box::new(Expression::Literal {
+                    value: b"1",
+                    r#type: LiteralType::Int
+                }),
+                block: vec![].into(),
+                else_block: Some(vec![].into())
+            })
+        );
 
-    //     // assert_eq!(
-    //     //     Expression::parse_if(&mut TokenIt(
-    //     //         compiler_lexer::tokenize("if 2 + 2 {\ncall()\n}")
-    //     //             .flatten()
-    //     //             .peekable()
-    //     //     )),
-    //     //     Ok(Expression::If {
-    //     //         condition: Box::new(Expression::Binary(Box::new(Node::Compound(Box::new((
-    //     //             Node::Scalar(Expression::Literal {
-    //     //                 value: "2".into(),
-    //     //                 r#type: LiteralType::Int
-    //     //             }),
-    //     //             Operator::Plus,
-    //     //             Node::Scalar(Expression::Literal {
-    //     //                 value: "2".into(),
-    //     //                 r#type: LiteralType::Int
-    //     //             })
-    //     //         )))))),
-    //     //         block: vec![Statement::Expression(Expression::Call {
-    //     //             path: vec!["call".into()].into(),
-    //     //             args: vec![].into()
-    //     //         })]
-    //     //         .into(),
-    //     //         else_block: None
-    //     //     })
-    //     // );
+        assert_eq!(
+            Expression::parse_if(&mut parser("if 2 + 2 {\ncall()\n}")),
+            Ok(Expression::If {
+                condition: Box::new(Expression::Binary(Box::new(Node::Compound(Box::new((
+                    Node::Scalar(Expression::Literal {
+                        value: b"2",
+                        r#type: LiteralType::Int
+                    }),
+                    Operator::Plus,
+                    Node::Scalar(Expression::Literal {
+                        value: b"2",
+                        r#type: LiteralType::Int
+                    })
+                )))))),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec![b"call" as &[_]].into(),
+                    args: vec![].into()
+                })]
+                .into(),
+                else_block: None
+            })
+        );
 
-    //     // assert_eq!(
-    //     //     Expression::parse_if(&mut TokenIt(
-    //     //         compiler_lexer::tokenize("if 1 {call()}")
-    //     //             .flatten()
-    //     //             .peekable()
-    //     //     )),
-    //     //     Ok(Expression::If {
-    //     //         condition: Box::new(Expression::Literal {
-    //     //             value: "1".into(),
-    //     //             r#type: LiteralType::Int
-    //     //         }),
-    //     //         block: vec![Statement::Expression(Expression::Call {
-    //     //             path: vec!["call".into()].into(),
-    //     //             args: vec![].into()
-    //     //         })]
-    //     //         .into(),
-    //     //         else_block: None
-    //     //     })
-    //     // );
+        assert_eq!(
+            Expression::parse_if(&mut parser("if 1 {call()}")),
+            Ok(Expression::If {
+                condition: Box::new(Expression::Literal {
+                    value: b"1",
+                    r#type: LiteralType::Int
+                }),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec![b"call" as &[_]].into(),
+                    args: vec![].into()
+                })]
+                .into(),
+                else_block: None
+            })
+        );
 
-    //     // assert_eq!(
-    //     //     Expression::parse_if(&mut TokenIt(
-    //     //         compiler_lexer::tokenize("if 1{ call() }else { other_call()}")
-    //     //             .flatten()
-    //     //             .peekable()
-    //     //     )),
-    //     //     Ok(Expression::If {
-    //     //         condition: Box::new(Expression::Literal {
-    //     //             value: "1".into(),
-    //     //             r#type: LiteralType::Int
-    //     //         }),
-    //     //         block: vec![Statement::Expression(Expression::Call {
-    //     //             path: vec!["call".into()].into(),
-    //     //             args: vec![].into()
-    //     //         })]
-    //     //         .into(),
-    //     //         else_block: Some(
-    //     //             vec![Statement::Expression(Expression::Call {
-    //     //                 path: vec!["other_call".into()].into(),
-    //     //                 args: vec![].into()
-    //     //             })]
-    //     //             .into()
-    //     //         )
-    //     //     })
-    //     // );
+        assert_eq!(
+            Expression::parse_if(&mut parser("if 1{ call() }else { other_call()}")),
+            Ok(Expression::If {
+                condition: Box::new(Expression::Literal {
+                    value: b"1",
+                    r#type: LiteralType::Int
+                }),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec![b"call" as &[_]].into(),
+                    args: vec![].into()
+                })]
+                .into(),
+                else_block: Some(
+                    vec![Statement::Expression(Expression::Call {
+                        path: vec![b"other_call" as &[_]].into(),
+                        args: vec![].into()
+                    })]
+                    .into()
+                )
+            })
+        );
 
-    //     assert_eq!(
-    //         Expression::parse_if(&mut TokenIt(
-    //             compiler_lexer::tokenize(
-    //                 // TODO \n after 2 + 2 fails. try out the suggestion of always skipping newlines when getting next
-    //                 "if\n\n2 + 2\n{\n   \n  call  ()\n}\n\t  \nelse\n  \n\n{\n\n42\n\n\n}\n\n" // "if\n\n2 + 2{\n   \n  call  ()\n}\n\t  \nelse\n  \n\n{\n\n42\n\n\n}\n\n"
-    //             )
-    //             .flatten()
-    //             .peekable()
-    //         )),
-    //         Ok(Expression::If {
-    //             condition: Box::new(Expression::Binary(Box::new(Node::Compound(Box::new((
-    //                 Node::Scalar(Expression::Literal {
-    //                     value: "2".into(),
-    //                     r#type: LiteralType::Int
-    //                 }),
-    //                 Operator::Plus,
-    //                 Node::Scalar(Expression::Literal {
-    //                     value: "2".into(),
-    //                     r#type: LiteralType::Int
-    //                 }),
-    //             )))))),
-    //             block: vec![Statement::Expression(Expression::Call {
-    //                 path: vec!["call".into()].into(),
-    //                 args: vec![].into()
-    //             })]
-    //             .into(),
-    //             else_block: Some(
-    //                 vec![Statement::Expression(Expression::Literal {
-    //                     value: "42".into(),
-    //                     r#type: LiteralType::Int
-    //                 })]
-    //                 .into()
-    //             )
-    //         })
-    //     );
-    // }
+        assert_eq!(
+            Expression::parse_if(&mut parser(
+                // TODO \n after 2 + 2 fails. try out the suggestion of always skipping newlines when getting next
+                "if\n\n2 + 2{\n   \n  call  ()\n}\n\t  \nelse\n  \n\n{\n\n42\n\n\n}\n\n" // "if\n\n2 + 2\n{\n   \n  call  ()\n}\n\t  \nelse\n  \n\n{\n\n42\n\n\n}\n\n"
+            )),
+            Ok(Expression::If {
+                condition: Box::new(Expression::Binary(Box::new(Node::Compound(Box::new((
+                    Node::Scalar(Expression::Literal {
+                        value: b"2",
+                        r#type: LiteralType::Int
+                    }),
+                    Operator::Plus,
+                    Node::Scalar(Expression::Literal {
+                        value: b"2",
+                        r#type: LiteralType::Int
+                    }),
+                )))))),
+                block: vec![Statement::Expression(Expression::Call {
+                    path: vec![b"call" as &[_]].into(),
+                    args: vec![].into()
+                })]
+                .into(),
+                else_block: Some(
+                    vec![Statement::Expression(Expression::Literal {
+                        value: b"42",
+                        r#type: LiteralType::Int
+                    })]
+                    .into()
+                )
+            })
+        );
+    }
 
     #[test]
     fn unary_passes() {
         assert_eq!(
-            Expression::parse_unary(&mut TokenIt(
-                compiler_lexer::tokenize("-2").flatten().peekable()
-            )),
+            Expression::parse_unary(&mut parser("-2")),
             Ok(Expression::Unary(
                 Operator::Minus,
                 Box::new(Expression::Literal {
-                    value: "2".into(),
+                    value: b"2",
                     r#type: LiteralType::Int
                 })
             ))
         );
 
         assert_eq!(
-            Expression::parse_unary(&mut TokenIt(
-                compiler_lexer::tokenize("-(2 - 4)").flatten().peekable()
-            )),
+            Expression::parse_unary(&mut parser("-(2 - 4)")),
             Ok(Expression::Unary(
                 Operator::Minus,
                 Box::new(Expression::Parenthesis(Box::new(Expression::Binary(
                     Box::new(Node::Compound(Box::new((
                         Node::Scalar(Expression::Literal {
-                            value: "2".into(),
+                            value: b"2",
                             r#type: LiteralType::Int
                         }),
                         Operator::Minus,
                         Node::Scalar(Expression::Literal {
-                            value: "4".into(),
+                            value: b"4",
                             r#type: LiteralType::Int
                         }),
                     ))))
@@ -560,28 +501,18 @@ mod tests {
         );
 
         assert_eq!(
-            Expression::parse_unary(&mut TokenIt(
-                compiler_lexer::tokenize("*v").flatten().peekable()
-            )),
+            Expression::parse_unary(&mut parser("*v")),
             Ok(Expression::Unary(
                 Operator::Star,
-                Box::new(Expression::Path(vec!["v".into()].into()))
+                Box::new(Expression::Path([b"v" as &[_]].into()))
             ))
         );
 
         assert_eq!(
-            Expression::parse_unary(&mut TokenIt(
-                compiler_lexer::tokenize("+2").flatten().peekable()
-            )),
+            Expression::parse_unary(&mut parser("+2")),
             Err(ParserError::IllegalUnary {
-                token: Token {
-                    r#type: TokenType::Operator,
-                    value: "+".into(),
-                    span: Span {
-                        from: (0, 0),
-                        to: (0, 0)
-                    }
-                }
+                span: (0..1).into(),
+                operator: Operator::Plus,
             })
         );
     }

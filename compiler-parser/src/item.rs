@@ -7,13 +7,13 @@ use crate::{
     iterator::ExhaustiveGet, statement::Statement,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FunctionSignature<'s> {
     pub name: (&'s [u8], Option<Type<'s>>),
     pub arguments: EcoVec<ArgumentName<'s>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Item<'s> {
     Const {
         name: Name<'s>,
@@ -25,14 +25,12 @@ pub enum Item<'s> {
     },
 }
 
-impl<I: TokenIt> ExhaustiveGet<I> for Item<'_> {
-    fn find_predicate<'s>(
-        parser: &mut Parser<'s, I>,
-    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
+impl<'s, I: TokenIt> ExhaustiveGet<'s, I> for Item<'s> {
+    fn get(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         if parser.peek_value("const") {
-            Ok(Self::parse_const)
+            Self::parse_const(parser)
         } else if parser.peek_value("func") {
-            Ok(Self::parse_function)
+            Self::parse_function(parser)
         } else {
             Err(ParserError::ExpectedASTStructure {
                 span: parser.current_span(),
@@ -42,13 +40,13 @@ impl<I: TokenIt> ExhaustiveGet<I> for Item<'_> {
     }
 }
 
-impl Item<'_> {
-    pub fn parse_const<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+impl<'s> Item<'s> {
+    pub fn parse_const<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         parser
             .consume_value("const")
             .ok_or(ParserError::ExpectedTokenValue {
                 span: parser.current_span(),
-                value: "const".into(),
+                value: "const",
             })?;
 
         let identifier = {
@@ -62,12 +60,11 @@ impl Item<'_> {
         };
 
         let r#type = {
-            let source = parser.source;
             let r#type = parser
                 .tokens
-                .peeking_take_while(|t| !t.is_value(source, "="))
-                .map(|t| t.value(source))
-                .collect::<Vec<_>>();
+                .peeking_take_while(|t| !t.is_value(parser.source, "="))
+                .map(|t| t.value(parser.source))
+                .collect::<EcoVec<_>>();
 
             if r#type.is_empty() {
                 None
@@ -76,13 +73,14 @@ impl Item<'_> {
             }
         };
 
-        let value = parser.next_expression()?;
-
         parser
-            .consume(|t| t.r#type == TokenType::Newline)
-            .ok_or(ParserError::ExpectedNewline {
+            .consume_value("=")
+            .ok_or(ParserError::ExpectedTokenValue {
                 span: parser.current_span(),
+                value: "=",
             })?;
+
+        let value = parser.next_expression()?;
 
         Ok(Self::Const {
             name: Name(identifier, r#type),
@@ -90,12 +88,12 @@ impl Item<'_> {
         })
     }
 
-    pub fn parse_function<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError> {
+    pub fn parse_function<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         parser
             .consume_value("func")
             .ok_or(ParserError::ExpectedTokenValue {
                 span: parser.current_span(),
-                value: "func".into(),
+                value: "func",
             })?;
 
         let identifier = {
@@ -129,14 +127,13 @@ impl Item<'_> {
                     parser.token_value(&token)
                 };
 
-                let source = parser.source;
                 let r#type = Type(
                     parser
                         .tokens
                         .peeking_take_while(|t| {
-                            !t.is_value(source, ",") && !t.is_value(source, ")")
+                            !t.is_value(parser.source, ",") && !t.is_value(parser.source, ")")
                         })
-                        .map(|t| t.value(source))
+                        .map(|t| t.value(parser.source))
                         .collect(),
                 );
 
@@ -146,12 +143,11 @@ impl Item<'_> {
         )?;
 
         let r#type = {
-            let source = parser.source;
             let r#type = parser
                 .tokens
-                .peeking_take_while(|t| !t.is_value(source, "{"))
-                .map(|t| t.value(source))
-                .collect::<Vec<_>>();
+                .peeking_take_while(|t| !t.is_value(parser.source, "{"))
+                .map(|t| t.value(parser.source))
+                .collect::<EcoVec<_>>();
 
             if r#type.is_empty() {
                 None
@@ -162,21 +158,6 @@ impl Item<'_> {
 
         let body = parser.consume_block()?;
 
-        /* TODO!
-        if let Some(ref r#type) = r#type
-            && body
-                .iter()
-                .find(|&s| matches!(s, Statement::Return(_)))
-                .is_none()
-        {
-            return Some(Err(anyhow!(
-                "Function {} must return {}, returns void",
-                identifier,
-                r#type
-            )));
-        }
-        */
-
         Ok(Self::Function {
             signature: FunctionSignature {
                 name: (identifier, r#type),
@@ -186,5 +167,3 @@ impl Item<'_> {
         })
     }
 }
-
-// TODO tests

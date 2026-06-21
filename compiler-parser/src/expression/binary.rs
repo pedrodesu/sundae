@@ -1,10 +1,7 @@
 use compiler_lexer::definitions::{Token, TokenType};
 use ecow::EcoVec;
 
-use super::{
-    Expression,
-    operator::{Operator, to_operator},
-};
+use super::{Expression, operator::Operator};
 use crate::{Parser, ParserError, TokenIt};
 
 const OPERATOR_PRIORITY: &[&[Operator]] = {
@@ -14,8 +11,7 @@ const OPERATOR_PRIORITY: &[&[Operator]] = {
 };
 
 #[inline]
-fn priority(operator: Operator) -> usize
-{
+fn priority(operator: Operator) -> usize {
     OPERATOR_PRIORITY
         .iter()
         .copied()
@@ -26,40 +22,40 @@ fn priority(operator: Operator) -> usize
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Node
-{
-    Scalar(Expression),
-    Compound(Box<(Node, Operator, Node)>),
+pub enum Node<'s> {
+    Scalar(Expression<'s>),
+    Compound(Box<(Node<'s>, Operator, Node<'s>)>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum RPNItem
-{
-    Scalar(Expression),
+enum RPNItem<'s> {
+    Scalar(Expression<'s>),
     Operator(Operator),
 }
 
-impl Node
-{
+impl<'s> Node<'s> {
     // We do not need to concern ourselves with unary operators or parenthesis here because we already handle them as singular, regular expressions.
     // This makes our shunting yard much simpler.
-    fn shunting_yard<I: TokenIt>(parser: &mut Parser<I>) -> Result<EcoVec<RPNItem>, ParserError>
-    {
+    fn shunting_yard<I: TokenIt>(
+        parser: &mut Parser<'s, I>,
+    ) -> Result<EcoVec<RPNItem<'s>>, ParserError> {
         let mut output_queue = EcoVec::new();
         let mut operator_stack = EcoVec::new();
 
         let mut last_was_scalar = false;
 
-        while let Some(p) = parser.0.peek()
-            && (p.r#type != TokenType::Separator || p.value == "(")
+        while let Some(p) = parser.tokens.peek()
+            && (p.r#type != TokenType::Separator || p.value(parser.source) == b"(")
         {
-            if last_was_scalar
-            {
+            if last_was_scalar {
                 last_was_scalar = false;
 
-                let t = parser
-                    .next(|t| t.r#type == TokenType::Operator)
-                    .ok_or(ParserError::ExpectedTokenType { r#type: "Operator" })?;
+                let t = parser.consume(|t| t.r#type == TokenType::Operator).ok_or(
+                    ParserError::ExpectedTokenType {
+                        r#type: "Operator",
+                        span: parser.current_span(),
+                    },
+                )?;
 
                 while let Some(
                     t2 @ Token {
@@ -68,49 +64,43 @@ impl Node
                     },
                 ) = operator_stack.last()
                 {
-                    let op = to_operator(&t);
-                    let op2 = to_operator(t2);
+                    let op = Operator::from_bytes(t.value(parser.source)).unwrap();
+                    let op2 = Operator::from_bytes(t2.value(parser.source)).unwrap();
 
-                    if priority(op2) >= priority(op)
-                    {
-                        output_queue.push(RPNItem::Operator(to_operator(
-                            &operator_stack.pop().unwrap(),
-                        )));
-                    }
-                    else
-                    {
+                    if priority(op2) >= priority(op) {
+                        output_queue.push(RPNItem::Operator(
+                            Operator::from_bytes(
+                                &operator_stack.pop().unwrap().value(parser.source),
+                            )
+                            .unwrap(),
+                        ));
+                    } else {
                         break;
                     }
                 }
 
                 operator_stack.push(t.clone());
-            }
-            else
-            {
+            } else {
                 last_was_scalar = true;
 
-                let e = (Expression::shallow_find_predicate(&mut parser.clone())?)(parser)?;
+                let e = (Expression::get_shallow(&mut parser.clone())?)(parser)?;
                 output_queue.push(RPNItem::Scalar(e));
             }
         }
 
-        while let Some(t) = operator_stack.pop()
-        {
-            output_queue.push(RPNItem::Operator(to_operator(&t)));
+        while let Some(t) = operator_stack.pop() {
+            output_queue.push(RPNItem::Operator(
+                Operator::from_bytes(t.value(parser.source)).unwrap(),
+            ));
         }
 
         Ok(output_queue)
     }
 
     #[inline]
-    fn consume(it: &mut impl Iterator<Item = RPNItem>) -> Result<Self, ParserError>
-    {
-        match it
-            .next()
-            .ok_or(ParserError::ExpectedASTStructure { name: "Expression" })?
-        {
-            RPNItem::Operator(op) =>
-            {
+    fn consume(it: &mut impl Iterator<Item = RPNItem<'s>>) -> Result<Self, ()> {
+        match it.next().ok_or(())? {
+            RPNItem::Operator(op) => {
                 let rhs = Self::consume(it)?;
                 let lhs = Self::consume(it)?;
 
@@ -121,41 +111,40 @@ impl Node
     }
 
     #[inline]
-    pub fn parse<I: TokenIt>(parser: &mut Parser<I>) -> Result<Self, ParserError>
-    {
+    pub fn parse<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         let rpn = Self::shunting_yard(parser)?;
 
-        let res = Self::consume(&mut rpn.into_iter().rev())?;
+        let res = Self::consume(&mut rpn.into_iter().rev()).map_err(|_| {
+            ParserError::ExpectedASTStructure {
+                span: parser.current_span(),
+                name: "Expression",
+            }
+        })?;
 
         Ok(res)
     }
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use compiler_lexer::definitions::LiteralType;
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::tests::parser;
 
     #[test]
-    fn simple_binary_passes()
-    {
-        const SOURCE: &[u8] = "9 + 10".as_bytes();
-
+    fn simple_binary_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("9 + 10").flatten().peekable()
-            )),
+            Node::parse(&mut parser("9 + 10")),
             Ok(Node::Compound(Box::new((
                 Node::Scalar(Expression::Literal {
-                    value: "9".into(),
+                    value: b"9",
                     r#type: LiteralType::Int
                 }),
                 Operator::Plus,
                 Node::Scalar(Expression::Literal {
-                    value: "10".into(),
+                    value: b"10",
                     r#type: LiteralType::Int
                 })
             ))))
@@ -163,22 +152,19 @@ mod tests
     }
 
     #[test]
-    fn hacky_binary_with_unary_passes()
-    {
+    fn binary_with_unary_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("10 - -1").flatten().peekable()
-            )),
+            Node::parse(&mut parser("10 - -1")),
             Ok(Node::Compound(Box::new((
                 Node::Scalar(Expression::Literal {
-                    value: "10".into(),
+                    value: b"10",
                     r#type: LiteralType::Int
                 }),
                 Operator::Minus,
                 Node::Scalar(Expression::Unary(
                     Operator::Minus,
                     Box::new(Expression::Literal {
-                        value: "1".into(),
+                        value: b"1",
                         r#type: LiteralType::Int
                     })
                 ))
@@ -187,36 +173,31 @@ mod tests
     }
 
     #[test]
-    fn priority_binary_passes()
-    {
+    fn priority_binary_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("9 - 2 * 4 + 1")
-                    .flatten()
-                    .peekable()
-            )),
+            Node::parse(&mut parser("9 - 2 * 4 + 1")),
             Ok(Node::Compound(Box::new((
                 Node::Compound(Box::new((
                     Node::Scalar(Expression::Literal {
-                        value: "9".into(),
+                        value: b"9",
                         r#type: LiteralType::Int
                     }),
                     Operator::Minus,
                     Node::Compound(Box::new((
                         Node::Scalar(Expression::Literal {
-                            value: "2".into(),
+                            value: b"2",
                             r#type: LiteralType::Int
                         }),
                         Operator::Star,
                         Node::Scalar(Expression::Literal {
-                            value: "4".into(),
+                            value: b"4",
                             r#type: LiteralType::Int
                         })
                     )))
                 ))),
                 Operator::Plus,
                 Node::Scalar(Expression::Literal {
-                    value: "1".into(),
+                    value: b"1",
                     r#type: LiteralType::Int
                 })
             ))))
@@ -224,36 +205,31 @@ mod tests
     }
 
     #[test]
-    fn custom_priority_binary_passes()
-    {
+    fn custom_priority_binary_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("9 - 2 * 4 >> 1")
-                    .flatten()
-                    .peekable()
-            )),
+            Node::parse(&mut parser("9 - 2 * 4 >> 1")),
             Ok(Node::Compound(Box::new((
                 Node::Compound(Box::new((
                     Node::Scalar(Expression::Literal {
-                        value: "9".into(),
+                        value: b"9",
                         r#type: LiteralType::Int
                     }),
                     Operator::Minus,
                     Node::Compound(Box::new((
                         Node::Scalar(Expression::Literal {
-                            value: "2".into(),
+                            value: b"2",
                             r#type: LiteralType::Int
                         }),
                         Operator::Star,
                         Node::Scalar(Expression::Literal {
-                            value: "4".into(),
+                            value: b"4",
                             r#type: LiteralType::Int
                         })
                     )))
                 ))),
                 Operator::Shr,
                 Node::Scalar(Expression::Literal {
-                    value: "1".into(),
+                    value: b"1",
                     r#type: LiteralType::Int
                 })
             ))))
@@ -261,35 +237,30 @@ mod tests
     }
 
     #[test]
-    fn parenthesis_binary_passes()
-    {
+    fn parenthesis_binary_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("9 - 2 * (4 + 1)")
-                    .flatten()
-                    .peekable()
-            )),
+            Node::parse(&mut parser("9 - 2 * (4 + 1)")),
             Ok(Node::Compound(Box::new((
                 Node::Scalar(Expression::Literal {
-                    value: "9".into(),
+                    value: b"9",
                     r#type: LiteralType::Int
                 }),
                 Operator::Minus,
                 Node::Compound(Box::new((
                     Node::Scalar(Expression::Literal {
-                        value: "2".into(),
+                        value: b"2",
                         r#type: LiteralType::Int
                     }),
                     Operator::Star,
                     Node::Scalar(Expression::Parenthesis(Box::new(Expression::Binary(
                         Box::new(Node::Compound(Box::new((
                             Node::Scalar(Expression::Literal {
-                                value: "4".into(),
+                                value: b"4",
                                 r#type: LiteralType::Int
                             }),
                             Operator::Plus,
                             Node::Scalar(Expression::Literal {
-                                value: "1".into(),
+                                value: b"1",
                                 r#type: LiteralType::Int
                             })
                         ))))
@@ -300,37 +271,32 @@ mod tests
     }
 
     #[test]
-    fn binary_with_call_passes()
-    {
+    fn binary_with_call_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("9 << 2 * (add(2, 4) + 1)")
-                    .flatten()
-                    .peekable()
-            )),
+            Node::parse(&mut parser("9 << 2 * (add(2, 4) + 1)")),
             Ok(Node::Compound(Box::new((
                 Node::Scalar(Expression::Literal {
-                    value: "9".into(),
+                    value: b"9",
                     r#type: LiteralType::Int
                 }),
                 Operator::Shl,
                 Node::Compound(Box::new((
                     Node::Scalar(Expression::Literal {
-                        value: "2".into(),
+                        value: b"2",
                         r#type: LiteralType::Int
                     }),
                     Operator::Star,
                     Node::Scalar(Expression::Parenthesis(Box::new(Expression::Binary(
                         Box::new(Node::Compound(Box::new((
                             Node::Scalar(Expression::Call {
-                                path: vec!["add".into()].into(),
-                                args: vec![
+                                path: [b"add" as &[_]].into(),
+                                args: [
                                     Expression::Literal {
-                                        value: "2".into(),
+                                        value: b"2",
                                         r#type: LiteralType::Int
                                     },
                                     Expression::Literal {
-                                        value: "4".into(),
+                                        value: b"4",
                                         r#type: LiteralType::Int
                                     }
                                 ]
@@ -338,7 +304,7 @@ mod tests
                             }),
                             Operator::Plus,
                             Node::Scalar(Expression::Literal {
-                                value: "1".into(),
+                                value: b"1",
                                 r#type: LiteralType::Int
                             })
                         ))))
@@ -349,20 +315,21 @@ mod tests
     }
 
     #[test]
-    fn invalid_binary_passes()
-    {
+    fn invalid_binary_passes() {
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("2 + 4 2").flatten().peekable(),
-            )),
-            Err(ParserError::ExpectedTokenType { r#type: "Operator" })
+            Node::parse(&mut parser("2 + 4 2")),
+            Err(ParserError::ExpectedTokenType {
+                r#type: "Operator",
+                span: 6.into()
+            })
         );
 
         assert_eq!(
-            Node::parse(&mut TokenIt(
-                compiler_lexer::tokenize("2 + 4 -").flatten().peekable(),
-            )),
-            Err(ParserError::ExpectedASTStructure { name: "Expression" })
+            Node::parse(&mut parser("2 + 4 -")),
+            Err(ParserError::ExpectedASTStructure {
+                name: "Expression",
+                span: (7..7).into()
+            })
         );
     }
 }

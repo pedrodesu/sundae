@@ -1,4 +1,5 @@
 use compiler_lexer::definitions::{Token, TokenType};
+use ecow::EcoVec;
 use itertools::Itertools;
 
 use crate::{
@@ -21,23 +22,20 @@ pub enum Statement<'s> {
     },
 }
 
-impl<I: TokenIt> ExhaustiveGet<I> for Statement<'_> {
-    fn find_predicate<'s>(
-        parser: &mut Parser<'s, I>,
-    ) -> Result<fn(&mut Parser<'s, I>) -> Result<Self, ParserError>, ParserError> {
+impl<'s, I: TokenIt> ExhaustiveGet<'s, I> for Statement<'s> {
+    fn get(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         if parser.peek_value("ret") {
-            Ok(Self::parse_return)
+            Self::parse_return(parser)
         } else if parser.peek_value("let") {
-            Ok(Self::parse_local)
+            Self::parse_local(parser)
         } else {
-            {
-                let mut parser = parser.clone();
-                if parser.next_expression().is_ok() {
-                    if parser.consume_value("=").is_some() {
-                        return Ok(Self::parse_assign);
-                    } else {
-                        return Ok(Self::parse_expression);
-                    }
+            let mut lookahead = parser.clone();
+
+            if lookahead.next_expression().is_ok() {
+                if lookahead.consume_value("=").is_some() {
+                    return Self::parse_assign(parser);
+                } else {
+                    return Self::parse_expression(parser);
                 }
             }
 
@@ -53,7 +51,6 @@ impl<I: TokenIt> ExhaustiveGet<I> for Statement<'_> {
 // also make error handling more proper with line and col and what not
 
 impl<'s> Statement<'s> {
-    #[inline]
     fn assert_end<I: TokenIt>(
         parser: &mut Parser<'s, I>,
         predicate: impl FnOnce(&mut Parser<'s, I>) -> Result<Self, ParserError>,
@@ -74,7 +71,6 @@ impl<'s> Statement<'s> {
         }
     }
 
-    #[inline]
     pub fn parse_return<I: TokenIt>(parser: &mut Parser<'s, I>) -> Result<Self, ParserError> {
         Self::assert_end(parser, |parser| {
             parser
@@ -92,7 +88,7 @@ impl<'s> Statement<'s> {
             {
                 Ok(Self::Return(None))
             } else {
-                let e = Expression::get(parser)?;
+                let e = parser.next_expression()?;
 
                 Ok(Self::Return(Some(e)))
             }
@@ -168,12 +164,13 @@ impl<'s> Statement<'s> {
             // No. a variable can be mutable. a type does not have this qualification. a pointer, however, may or may not be mutable.
 
             let r#type = {
-                let source = parser.source;
                 let r#type = parser
                     .tokens
-                    .peeking_take_while(|t| !t.is_value(source, "=") && t.r#type != TokenType::Newline)
-                    .map(|t| t.value(source))
-                    .collect::<Vec<_>>();
+                    .peeking_take_while(|t| {
+                        !t.is_value(parser.source, "=") && t.r#type != TokenType::Newline
+                    })
+                    .map(|t| t.value(parser.source))
+                    .collect::<EcoVec<_>>();
 
                 if r#type.is_empty() {
                     None
@@ -199,21 +196,10 @@ impl<'s> Statement<'s> {
 
 #[cfg(test)]
 mod tests {
-    use compiler_lexer::{LexerEvent, definitions::LiteralType};
+    use compiler_lexer::definitions::LiteralType;
     use pretty_assertions::assert_eq;
 
-    use super::*;
-    use crate::Operator;
-
-    fn parser(source: &str) -> Parser<'_, impl TokenIt> {
-        Parser::new(
-            source,
-            compiler_lexer::tokenize(source).map(|event| match event {
-                LexerEvent::Token(token) => token,
-                LexerEvent::Error(err) => panic!("lexer error: {err:?}"),
-            }),
-        )
-    }
+    use crate::{Operator, tests::parser, *};
 
     // Statement::parse_expression is just a struct wrapper for an already tested function, so we don't test it here
 
@@ -236,7 +222,7 @@ mod tests {
             Statement::parse_return(&mut parser("ret ret\n\n")),
             Err(ParserError::ExpectedASTStructure {
                 name: "Expression",
-                span: (3..5).into()
+                span: (4..7).into()
             })
         );
     }
@@ -299,7 +285,7 @@ mod tests {
             Statement::parse_local(&mut parser("let b i32 = 4\n")),
             Ok(Statement::Local {
                 mutable: false,
-                name: Name("b".as_bytes(), Some(Type(vec!["i32".as_bytes()]))),
+                name: Name("b".as_bytes(), Some(Type(["i32".as_bytes()].into()))),
                 init: Some(Expression::Literal {
                     value: "4".as_bytes(),
                     r#type: LiteralType::Int
@@ -308,10 +294,10 @@ mod tests {
         );
 
         assert_eq!(
-            Statement::parse_local(&mut parser("let b i32\n")),
+            Statement::parse_local(&mut parser("let b i32")),
             Ok(Statement::Local {
                 mutable: false,
-                name: Name("b".as_bytes(), Some(Type(vec!["i32".as_bytes()]))),
+                name: Name("b".as_bytes(), Some(Type(["i32".as_bytes()].into()))),
                 init: None
             })
         );
@@ -322,7 +308,7 @@ mod tests {
                 mutable: false,
                 name: Name(
                     "c".as_bytes(),
-                    Some(Type(vec!["*".as_bytes(), "i32".as_bytes()]))
+                    Some(Type(["*".as_bytes(), "i32".as_bytes()].into()))
                 ),
                 init: None
             })
@@ -334,7 +320,9 @@ mod tests {
                 mutable: false,
                 name: Name(
                     "s".as_bytes(),
-                    Some(Type(vec!["[".as_bytes(), "]".as_bytes(), "i32".as_bytes()]))
+                    Some(Type(
+                        ["[".as_bytes(), "]".as_bytes(), "i32".as_bytes()].into()
+                    ))
                 ),
                 init: None
             })
